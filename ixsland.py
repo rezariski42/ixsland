@@ -1676,6 +1676,11 @@ class IxslandWidget(QWidget):
         canvas_x = self.context_center_x(geom, scale) + offset_x
         canvas_y = geom.y() + top_margin
 
+        # Jaga island tetap terlihat: offset bisa terbawa dari layar lain (mis. layar
+        # lebih lebar) sehingga mendorong island ke luar batas layar target.
+        canvas_x = max(geom.x(), min(geom.x() + max(0, geom.width() - canvas_w), canvas_x))
+        canvas_y = max(geom.y(), min(geom.y() + max(0, geom.height() - canvas_h), canvas_y))
+
         # FIXED CANVAS SIZE: Never resize window to keep KWin Wayland position permanent
         self.setGeometry(canvas_x, canvas_y, canvas_w, canvas_h)
         self.setFixedSize(canvas_w, canvas_h)
@@ -1695,9 +1700,41 @@ class IxslandWidget(QWidget):
         self.target_screen_name = name
         self.cfg["target_screen"] = name
         save_config(self.cfg)
+        # Offset posisi bisa berasal dari layar lain (lebih lebar/berbeda offset).
+        # Pangkas agar island tetap tampil di dalam layar target yang baru.
+        self._clamp_offsets_to_screen()
         self.init_placement()
         self.update_mask_for_mode()
         self.update()
+        if self.secondary_island:
+            sec = self.secondary_island
+            sec.target_screen_name = name
+            sec.init_placement()
+        if self.settings_dialog:
+            try:
+                self.settings_dialog.sync_position_inputs(
+                    self.cfg.get("offset_x", 0), self.cfg.get("top_margin", 16)
+                )
+            except Exception:
+                pass
+
+    def _clamp_offsets_to_screen(self):
+        """Pastikan offset X/Y tetap menempatkan island di dalam layar target."""
+        s = self.get_target_screen()
+        if not s:
+            return
+        geom = s.geometry()
+        scale = getattr(self, "scale", 1.0) or 1.0
+        canvas_w = int(round(CANVAS_W * scale))
+        canvas_h = int(round(CANVAS_H * scale))
+        center_x = self.context_center_x(geom, scale)
+        x = center_x + int(self.cfg.get("offset_x", 0))
+        y = geom.y() + int(round(self.cfg.get("top_margin", 16) * scale))
+        x = max(geom.x(), min(geom.x() + max(0, geom.width() - canvas_w), x))
+        y = max(geom.y(), min(geom.y() + max(0, geom.height() - canvas_h), y))
+        self.cfg["offset_x"] = int(x - center_x)
+        self.cfg["top_margin"] = int(round((y - geom.y()) / scale))
+        save_config(self.cfg)
 
     def set_pos_locked(self, locked):
         locked = bool(locked)

@@ -316,6 +316,8 @@ Berkas konfigurasi tersimpan pada:
 - **Tab Tentang Optimal**: Menggunakan tampilan tema gelap kontras dengan scroll area sehingga informasi pengembang dan status rilis terbaca jelas.
 - **Pembersihan Uninstaller Windows**: Proses pencopotan pemasangan kini tuntas membersihkan folder instalasi, entri aplikasi, dan pintasan.
 - **Stabilitas Autostart Linux**: Penempatan ikon autostart Linux kini menggunakan path permanen dan restart layanan berjalan otomatis saat pembaruan.
+- **Pemilihan Layar Target (Linux & Windows)**: Island kini selalu tampil di layar yang dipilih — offset posisi dipangkas otomatis agar tidak terdorong keluar layar saat berpindah monitor.
+- **Selalu di Atas (Linux Wayland)**: Jendela island dipaksa ke lapisan teratas KWin (`keepAbove`/AboveLayer) dan tampil di semua desktop virtual, sehingga tidak lagi tertimbun jendela lain.
 
 ---
 

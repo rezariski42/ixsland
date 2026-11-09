@@ -2635,6 +2635,17 @@ class IxslandWidget(QWidget):
 
         x = geo.x() + (geo.width() - target_w) // 2 + offset_x
         y = geo.y() + top_margin
+
+        # Jaga island tetap terlihat: offset bisa terbawa dari layar lain (mis. layar
+        # lebih lebar) sehingga mendorong island ke luar batas layar target.
+        if geo.width() >= target_w:
+            x = max(geo.x(), min(geo.x() + geo.width() - target_w, x))
+        else:
+            x = geo.x()
+        if geo.height() >= target_h:
+            y = max(geo.y(), min(geo.y() + geo.height() - target_h, y))
+        else:
+            y = geo.y()
         self.setGeometry(x, y, target_w, target_h)
 
     # --- PENATAAN & POSISI (port dari Linux) ---
@@ -2644,9 +2655,41 @@ class IxslandWidget(QWidget):
         self.target_screen_name = name
         self.cfg["target_screen"] = name
         save_config(self.cfg)
+        self._clamp_offsets_to_screen()
         self.init_placement()
         self.update_mask_for_mode()
         self.update()
+        if self.settings_dialog:
+            try:
+                self.settings_dialog.sync_position_inputs(
+                    self.cfg.get("offset_x", 0), self.cfg.get("top_margin", 12)
+                )
+            except Exception:
+                pass
+
+    def _clamp_offsets_to_screen(self):
+        """Pastikan offset X/Y tetap menempatkan island di dalam layar target."""
+        screen = self.get_target_screen()
+        if not screen:
+            return
+        geo = screen.geometry()
+        scale = getattr(self, "scale", 1.0) or 1.0
+        target_w = int(round(CANVAS_W * scale))
+        target_h = int(round(CANVAS_H * scale))
+        center_x = geo.x() + (geo.width() - target_w) // 2
+        x = center_x + int(self.cfg.get("offset_x", 0))
+        y = geo.y() + int(round(self.cfg.get("top_margin", 12) * scale))
+        if geo.width() >= target_w:
+            x = max(geo.x(), min(geo.x() + geo.width() - target_w, x))
+        else:
+            x = geo.x()
+        if geo.height() >= target_h:
+            y = max(geo.y(), min(geo.y() + geo.height() - target_h, y))
+        else:
+            y = geo.y()
+        self.cfg["offset_x"] = int(x - center_x)
+        self.cfg["top_margin"] = int(round((y - geo.y()) / scale))
+        save_config(self.cfg)
 
     def set_pos_locked(self, locked):
         locked = bool(locked)
