@@ -303,23 +303,29 @@ Berkas konfigurasi tersimpan pada:
 
 ## 🗒️ Changelog
 
-### v1.3.0
+### v1.3.0 (Versi Terbaru)
 **Fitur baru (Linux & Windows)**
-- Tab **Tampilan** Windows kini 100% identik dengan Linux: grup **Penataan & Posisi** (tombol kunci posisi, spinbox koordinat X/Y, Reset X/Y, Tengahkan, dan pemilih **Layar Target**).
-- **Drag manual** island (Windows & Linux) saat posisi tidak terkunci; kunci posisi mencegah geser tak sengaja.
-- **Layar Target** bisa memilih layar mana pun yang terdeteksi; **default = layar utama** di Linux dan Windows.
-- Pintasan menu klik kanan island: *Kunci/Buka Kunci Posisi* dan *Reset Posisi Tengah*.
-- Installer Windows bergaya wizard: pilih folder tujuan, **Pasang / Perbaiki (Repair) / Copot Pemasangan**, shortcut, autostart, terdaftar di *Aplikasi terinstal* Windows.
-- Paket Linux binari mandiri (`ixsland-linux-x64.tar.gz`) + pemasang satu baris — **pengguna tidak perlu memasang Python**.
+- **Paritas Pengaturan Penuh**: Tab Tampilan Windows dan Linux kini 100% identik dengan grup Penataan & Posisi (tombol kunci posisi, koordinat manual X/Y, Reset, Tengahkan, dan pemilih Layar Target).
+- **Penataan Posisi & Drag**: Island dapat digeser bebas atau diatur koordinatnya, dilengkapi tombol kunci agar posisi tidak bergeser tak sengaja.
+- **Dukungan Multi-Monitor**: Pilihan Layar Target fleksibel dengan default otomatis pada layar utama (*primary screen*).
+- **Installer Mandiri**: Pemasang standalone `Setup.exe` (Windows) dan paket binari mandiri (Linux) tanpa memerlukan Python di komputer pengguna.
 
-**Perbaikan bug**
-- Tab dialog Pengaturan di Windows tidak lagi terpotong (`◄►` / `...`) — semua 6 tab dan label terbaca jelas.
-- Tinggi dialog Pengaturan otomatis menyesuaikan konten terbesar, mencegah baris tombol Reset X/Y terkompresi atau teks tombol hilang di Windows.
-- Tab **Tentang** Windows memakai tema gelap konsisten (#151822) dan bisa di-*scroll*, seluruh teks profil, status pembaruan, dan tautan terbaca jelas.
-- Uninstaller Windows (`Uninstall.exe` / `Setup.exe --uninstall`) memindahkan proses dirinya ke `%TEMP%` secara otomatis sehingga folder instalasi `C:\ixsland` terhapus bersih tanpa terkunci berkas eksekutabel.
-- Tombol **Batal** pada dialog Pengaturan Windows mengembalikan skala, transparansi, posisi, dan status kunci seperti semula.
-- Path ikon autostart Linux menunjuk ke `~/.local/share/ixsland/icon.png` (sebelumnya menunjuk folder temp PyInstaller yang bisa hilang).
-- `install.sh` selalu me-*restart* layanan, sehingga versi terbaru langsung dipakai saat perbaruan pemasangan.
+**Perbaikan bug (Linux & Windows)**
+- **Kompatibilitas Windows 11 & 10**: Kinerja antarmuka dan integrasi sistem kini jauh lebih optimal dan stabil.
+- **Tampilan Dialog Pengaturan**: Seluruh tab, label, tombol Reset X/Y, dan pemilih layar kini tampil sempurna dan terbaca jelas tanpa terpotong.
+- **Tab Tentang Optimal**: Menggunakan tampilan tema gelap kontras dengan scroll area sehingga informasi pengembang dan status rilis terbaca jelas.
+- **Pembersihan Uninstaller Windows**: Proses pencopotan pemasangan kini tuntas membersihkan folder instalasi, entri aplikasi, dan pintasan.
+- **Stabilitas Autostart Linux**: Penempatan ikon autostart Linux kini menggunakan path permanen dan restart layanan berjalan otomatis saat pembaruan.
+
+---
+
+### v1.0.0 (Rilis Awal)
+**Fitur Awal (Linux & Windows)**
+- **Maskot Robot OLED Interaktif**: Pelacakan arah kursor real-time (gaze tracking), animasi kedip alami, dan mode tidur otomatis saat idle.
+- **Media Hub Dua Arah**: Sinkronisasi pemutar media (MPRIS di Linux / GSMTC di Windows) untuk Spotify, Chrome, Edge, dan Firefox dilengkapi seekbar serta visualizer bar.
+- **OSD Volume & Caps Lock**: Indikator volume sistem real-time dengan overboost 150% dan HUD status tombol Caps Lock / Shift Lock.
+- **Jadwal Sholat Astronomis Offline**: Perhitungan waktu sholat otomatis tanpa internet dan jeda musik otomatis saat waktu adzan tiba.
+- **Rilis Perdana**: Dukungan resmi untuk Linux Desktop (KDE Plasma 6 Wayland/X11) dan Windows 10/11 64-bit.
 
 ---
 
