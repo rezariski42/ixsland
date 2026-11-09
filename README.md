@@ -304,20 +304,17 @@ Berkas konfigurasi tersimpan pada:
 ## 🗒️ Changelog
 
 ### v1.3.0 (Versi Terbaru)
-**Fitur baru (Linux & Windows)**
-- **Paritas Pengaturan Penuh**: Tab Tampilan Windows dan Linux kini 100% identik dengan grup Penataan & Posisi (tombol kunci posisi, koordinat manual X/Y, Reset, Tengahkan, dan pemilih Layar Target).
-- **Penataan Posisi & Drag**: Island dapat digeser bebas atau diatur koordinatnya, dilengkapi tombol kunci agar posisi tidak bergeser tak sengaja.
-- **Dukungan Multi-Monitor**: Pilihan Layar Target fleksibel dengan default otomatis pada layar utama (*primary screen*).
-- **Installer Mandiri**: Pemasang standalone `Setup.exe` (Windows) dan paket binari mandiri (Linux) tanpa memerlukan Python di komputer pengguna.
+**Fitur (ringkas)**
+- Tab Tampilan Windows & Linux 100% identik: kunci posisi, koordinat X/Y, Reset, Tengahkan, dan pemilih Layar Target.
+- Drag bebas island + kunci posisi; dukungan multi-monitor (default layar utama).
+- Installer mandiri tanpa perlu Python di komputer pengguna (ukuran jauh lebih ringkas, unduh & pasang lebih cepat).
 
-**Perbaikan bug (Linux & Windows)**
-- **Kompatibilitas Windows 11 & 10**: Kinerja antarmuka dan integrasi sistem kini jauh lebih optimal dan stabil.
-- **Tampilan Dialog Pengaturan**: Seluruh tab, label, tombol Reset X/Y, dan pemilih layar kini tampil sempurna dan terbaca jelas tanpa terpotong.
-- **Tab Tentang Optimal**: Menggunakan tampilan tema gelap kontras dengan scroll area sehingga informasi pengembang dan status rilis terbaca jelas.
-- **Pembersihan Uninstaller Windows**: Proses pencopotan pemasangan kini tuntas membersihkan folder instalasi, entri aplikasi, dan pintasan.
-- **Stabilitas Autostart Linux**: Penempatan ikon autostart Linux kini menggunakan path permanen dan restart layanan berjalan otomatis saat pembaruan.
-- **Pemilihan Layar Target (Linux & Windows)**: Island kini selalu tampil di layar yang dipilih — offset posisi dipangkas otomatis agar tidak terdorong keluar layar saat berpindah monitor.
-- **Selalu di Atas (Linux Wayland)**: Jendela island dipaksa ke lapisan teratas KWin (`keepAbove`/AboveLayer) dan tampil di semua desktop virtual, sehingga tidak lagi tertimbun jendela lain.
+**Perbaikan & Optimasi (Windows)**
+- **Kompatibilitas Windows 11 & 10**: antarmuka dan integrasi sistem kini jauh lebih optimal dan stabil.
+- **Dialog Pengaturan**: seluruh tab, label, tombol Reset X/Y, dan pemilih layar tampil proporsional tanpa terpotong.
+- **Tab Tentang**: tema gelap kontras + scroll area, profil pengembang dan status rilis terbaca jelas.
+- **Pembersihan Uninstaller**: pencopotan pemasangan tuntas membersihkan folder instalasi, entri aplikasi, dan pintasan.
+- **Installer Windows**: dipadatkan agar unduh dan pasang lebih cepat.
 
 ---
 
