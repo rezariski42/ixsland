@@ -97,6 +97,36 @@ def main():
         ("Desktop Notification: Spectacle Tangkapan Layar", lambda: (
             dbus_call("triggerNotification", "Spectacle", "Tangkapan Layar", "Gambar tersimpan rapi di ~/Gambar/Screenshots.")
         )),
+        ("Baterai: Pengisian Daya 85% ⚡", lambda: (
+            dbus_call("triggerBattery", 85, True)
+        )),
+        ("Baterai: Lemah 15% 🪫", lambda: (
+            dbus_call("triggerBattery", 15, False)
+        )),
+        ("Clipboard Bubble: Teks Kode Disalin 📋", lambda: (
+            dbus_call("triggerClipboard", "https://github.com/rezariski/ixsland")
+        )),
+        ("Privacy Dot: Kamera & Mic Aktif 🟢🟠", lambda: (
+            dbus_call("togglePrivacy")
+        )),
+        ("Privacy Dot: Matikan Indikator", lambda: (
+            dbus_call("togglePrivacy")
+        )),
+        ("Pembaruan: Notifikasi Versi Baru 🚀", lambda: (
+            dbus_call("triggerUpdateDemo")
+        )),
+        ("Posisi: Kunci Drag 🔒", lambda: (
+            dbus_call("setPosLocked", "true")
+        )),
+        ("Posisi: Buka Kunci Drag 🔓", lambda: (
+            dbus_call("setPosLocked", "false")
+        )),
+        ("Skala: Perbesar 120%", lambda: (
+            dbus_call("setScale", "1.2")
+        )),
+        ("Skala: Kembalikan 100%", lambda: (
+            dbus_call("setScale", "1.0")
+        )),
         ("Final: Jam Digital Idle Normal", lambda: (
             dbus_call("triggerMascotSleep", False),
             dbus_call("triggerIdlePhase", 0)

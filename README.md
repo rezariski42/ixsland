@@ -12,16 +12,20 @@
 <br/>
 
 <p align="center">
-  <a href="https://github.com/rezariski/ixsland/releases/download/v1.0.0/ixsland-linux-v1.0.0.zip">
-    <img src="https://img.shields.io/badge/Direct%20Download-Linux%20ZIP%20(v1.0.0)-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" alt="Direct Download Linux ZIP" />
+  <b>Semua tautan di bawah selalu menunjuk ke versi TERBARU (latest):</b>
+</p>
+
+<p align="center">
+  <a href="https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh">
+    <img src="https://img.shields.io/badge/Install-Linux%20One%20Click%20(shell)-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" alt="Install Linux one click" />
   </a>
   &nbsp;
-  <a href="https://github.com/rezariski/ixsland/releases/download/v1.0.0/Setup.exe">
-    <img src="https://img.shields.io/badge/Direct%20Download-Windows%20Setup.exe%20(38MB)-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Windows Setup.exe" />
+  <a href="https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz">
+    <img src="https://img.shields.io/badge/Direct%20Download-Linux%20BIN%20(tanpa%20Python)-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" alt="Direct Download Linux binary" />
   </a>
   &nbsp;
-  <a href="https://github.com/rezariski/ixsland/releases/download/v1.0.0/ixsland-windows-v1.0.0.zip">
-    <img src="https://img.shields.io/badge/Direct%20Download-Windows%20ZIP%20(Portable)-22C55E?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Windows ZIP" />
+  <a href="https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe">
+    <img src="https://img.shields.io/badge/Direct%20Download-Windows%20Setup.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Windows Setup.exe" />
   </a>
 </p>
 
@@ -51,13 +55,22 @@
 
 ## 📥 Direct Downloads (Tautan Unduh Langsung)
 
-Klik tautan di bawah ini untuk langsung mengunduh paket resmi tanpa perlu navigasi halaman:
+Semua tautan memakai URL `releases/latest/download/...`, sehingga **selalu mengunduh versi terbaru** tanpa perlu membuka halaman rilis:
 
-| Sistem Operasi | Berkas Unduhan | Ukuran | Jenis Paket | Link Download Langsung |
-|---|---|---|---|---|
-| 🐧 **Linux** | `ixsland-linux-v1.0.0.zip` | 2.8 MB | Full Portable (Wayland / X11) | [⬇️ **Direct Download (Linux .ZIP)**](https://github.com/rezariski/ixsland/releases/download/v1.0.0/ixsland-linux-v1.0.0.zip) |
-| 🪟 **Windows** | `Setup.exe` | 38 MB | Standalone 1-Click Installer (Win 10/11 64-bit) | [⬇️ **Direct Download (Setup.exe)**](https://github.com/rezariski/ixsland/releases/download/v1.0.0/Setup.exe) |
-| 🪟 **Windows** | `ixsland-windows-v1.0.0.zip` | 37 MB | Portable Zip Package (Win 10/11 64-bit) | [⬇️ **Direct Download (Windows .ZIP)**](https://github.com/rezariski/ixsland/releases/download/v1.0.0/ixsland-windows-v1.0.0.zip) |
+| Sistem Operasi | Cara | Tanpa Python? | Tautan |
+|---|---|---|---|
+| 🐧 **Linux** | Satu baris di terminal | ✅ | [⬇️ **Install Linux (one click)**](https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh) |
+| 🐧 **Linux** | Unduh paket binari | ✅ | [⬇️ **ixsland-linux-x64.tar.gz**](https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz) |
+| 🪟 **Windows** | Unduh lalu jalankan Setup | ✅ | [⬇️ **Setup.exe (wizard Next/Next)**](https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe) |
+
+> **Linux — satu baris (pemasangan instan):**
+> ```bash
+> bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)
+> ```
+>
+> **Windows — satu klik:** unduh `Setup.exe`, jalankan, lalu **Berikutnya → Berikutnya → Selesai**.
+> Wizard mendukung pemilihan folder tujuan, **Pasang / Perbaiki (Repair) / Copot Pemasangan**, serta terdaftar
+> di *Pengaturan → Aplikasi → Aplikasi terinstal* Windows (Ubah / Copot).
 
 ---
 
@@ -71,9 +84,32 @@ Klik tautan di bawah ini untuk langsung mengunduh paket resmi tanpa perlu naviga
 
 ## 🐧 1. Linux Edition
 
-Pemasangan pada Linux membutuhkan waktu kurang dari 30 detik. Widget otomatis diletakkan tepat di bagian tengah atas monitor utama Anda.
+Pemasangan pada Linux membutuhkan waktu kurang dari 30 detik. Island muncul otomatis di **layar utama** dan
+bisa dipindah ke layar mana pun lewat **Pengaturan → Tampilan → Layar Target**.
 
-### Dependensi Sistem
+### Opsi A: Pemasangan Satu Klik — TANPA Python (Disarankan)
+
+Paket rilis sudah berupa binari mandiri (Python + PyQt6 sudah dibundel di dalamnya):
+
+```bash
+bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)
+```
+
+Atau unduh manual lalu pasang:
+
+```bash
+curl -LO https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz
+tar -xzf ixsland-linux-x64.tar.gz
+cd ixsland-linux-x64
+./install.sh
+```
+
+Installer memasang binari ke `~/.local/share/ixsland/ixsland`, mendaftarkan unit systemd user,
+membuat entri autostart, dan langsung menyalakan Dynamic Island.
+
+### Opsi B: Menjalankan dari Kode Sumber (Developer)
+
+Hanya untuk pengembang — butuh Python 3.10+ dan PyQt6:
 
 ```bash
 # Arch Linux / CachyOS / Manjaro
@@ -84,18 +120,14 @@ sudo apt update && sudo apt install python3 python3-pyqt6 pipewire wireplumber
 
 # Fedora
 sudo dnf install python3 python3-pyqt6 pipewire wireplumber
-```
 
-### Pasang & Jalankan
-
-```bash
 git clone https://github.com/rezariski/ixsland.git
 cd ixsland
 chmod +x install.sh
 ./install.sh
 ```
 
-Installer akan memasang berkas ke `~/.local/share/ixsland/`, mendaftarkan unit systemd user, dan langsung menyalakan Dynamic Island.
+Catatan: `wpctl` (PipeWire) dan `qdbus6` tetap dibutuhkan untuk kontrol volume/OSD dan penempatan jendela KWin.
 
 ### Manajemen Layanan (Linux)
 
@@ -118,11 +150,21 @@ Mendukung penuh arsitektur **Windows 10 (64-bit, 1903+)** dan **Windows 11 (64-b
 </div>
 
 ### Opsi A: Standalone Setup Installer (Paling Praktis, Tanpa Perlu Python)
-1. Buka folder [`windows/`](./windows/) atau unduh berkas **`Setup.exe`** (38 MB).
-2. Jalankan `Setup.exe` dan ikuti wizard grafis yang disediakan:
-   - Pilih direktori instalasi (default: `C:\ixsland`).
-   - Opsi membuat shortcut desktop & autostart saat Windows boot.
-3. Klik **Pasang Sekarang**. `ixsland` langsung aktif di monitor Anda tanpa memerlukan dependensi luar.
+
+1. Unduh **[`Setup.exe`](https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe)** lalu jalankan.
+2. Ikuti wizard gaya umum — cukup **Berikutnya → Berikutnya → Selesai**:
+   - **Halaman sambutan** — info versi dan langkah pemasangan.
+   - **Pilih lokasi pemasangan** (default: `C:\ixsland`, bisa diubah lewat *Jelajahi...*).
+   - **Opsi pemasangan** — pilih tindakan:
+     - `Pasang / Perbarui` — instalasi baru atau perbarui ke versi terbaru.
+     - `Perbaiki (Repair)` — pasang ulang berkas tanpa menghapus pengaturan.
+     - `Copot Pemasangan (Uninstall)` — hapus ixsland dari komputer.
+     - Checkbox: pintasan Desktop, pintasan Menu Mulai, mulai otomatis saat Windows Startup.
+   - **Proses** — progress bar + log pemasangan.
+   - **Selesai** — opsi langsung menjalankan ixsland.
+3. Island muncul di **layar utama**. Pengaturan bisa dibuka lewat ikon ⚙ pada island.
+4. Terdaftar di **Pengaturan Windows → Aplikasi → Aplikasi terinstal** (Ubah = jalankan kembali wizard, Copot = mode uninstall).
+   Mode sunyi tersedia: `Setup.exe --uninstall -q`.
 
 ### Opsi B: Menjalankan dari Kode Sumber (Developer)
 Pastikan Anda menggunakan Python 3.10+ (64-bit):
@@ -224,23 +266,60 @@ Berkas konfigurasi tersimpan pada:
 {
   "target_screen": "primary",
   "top_margin": 16,
+  "offset_x": 0,
+  "pos_locked": false,
+  "scale": 1.0,
+  "bg_opacity": 98,
   "latitude": -6.2088,
   "longitude": 106.8456,
   "timezone": 7.0,
   "city": "Jakarta (WIB)",
   "pause_music_on_adzan": true,
-  "enable_mascot": true
+  "enable_mascot": true,
+  "autostart": true,
+  "check_updates": true
 }
 ```
 
 | Opsi | Tipe | Penjelasan |
 |---|---|---|
-| `target_screen` | `string` | `"primary"` (monitor utama), atau nama konektor (`"HDMI-1"`, `"eDP-1"`). |
-| `top_margin` | `integer` | Jarak dalam pixel dari tepi atas layar monitor (default: `16`). |
+| `target_screen` | `string` | `"primary"` (monitor utama — **default**), atau nama layar terdeteksi (`"HDMI-A-1"`, `"DP-1"`, `"\\.\DISPLAY2"`). |
+| `top_margin` | `integer` | Jarak pixel dari tepi atas layar (Linux default `16`, Windows `12`). |
+| `offset_x` | `integer` | Geseran horizontal relatif terhadap titik tengah layar. |
+| `pos_locked` | `boolean` | `true` = kunci posisi (drag dimatikan), `false` = bisa digeser. |
+| `scale` | `float` | Skala ukuran island (`0.5`–`1.5`). |
+| `bg_opacity` | `integer` | Kegelapan latar island dalam persen. |
 | `latitude` / `longitude` | `float` | Titik koordinat bumi untuk perhitungan hisab waktu sholat. |
 | `timezone` | `float` | Selisih waktu UTC (misal `7.0` untuk WIB, `8.0` untuk WITA). |
 | `pause_music_on_adzan` | `boolean` | `true` untuk menjeda musik otomatis saat masuk waktu sholat. |
 | `enable_mascot` | `boolean` | `true` untuk mengaktifkan maskot robot OLED interaktif. |
+| `autostart` | `boolean` | Mulai otomatis saat login (Linux: `~/.config/autostart`, Windows: registry `Run`). |
+| `check_updates` | `boolean` | Pemeriksaan versi baru otomatis ke GitHub Releases. |
+
+> Semua opsi posisi juga bisa diatur langsung dari GUI: **Pengaturan → tab Tampilan → Penataan & Posisi**
+> (tombol kunci 🔒/🔓, spinbox X/Y, Reset, Tengahkan, dan combo **Layar Target**).
+
+---
+
+## 🗒️ Changelog
+
+### v1.3.0
+**Fitur baru (Linux & Windows)**
+- Tab **Tampilan** Windows kini 100% identik dengan Linux: grup **Penataan & Posisi** (tombol kunci posisi, spinbox koordinat X/Y, Reset X/Y, Tengahkan, dan pemilih **Layar Target**).
+- **Drag manual** island (Windows & Linux) saat posisi tidak terkunci; kunci posisi mencegah geser tak sengaja.
+- **Layar Target** bisa memilih layar mana pun yang terdeteksi; **default = layar utama** di Linux dan Windows.
+- Pintasan menu klik kanan island: *Kunci/Buka Kunci Posisi* dan *Reset Posisi Tengah*.
+- Installer Windows bergaya wizard: pilih folder tujuan, **Pasang / Perbaiki (Repair) / Copot Pemasangan**, shortcut, autostart, terdaftar di *Aplikasi terinstal* Windows.
+- Paket Linux binari mandiri (`ixsland-linux-x64.tar.gz`) + pemasang satu baris — **pengguna tidak perlu memasang Python**.
+
+**Perbaikan bug**
+- Tab dialog Pengaturan di Windows tidak lagi terpotong (`◄►` / `...`) — semua 6 tab dan label terbaca jelas.
+- Tinggi dialog Pengaturan otomatis menyesuaikan konten terbesar, mencegah baris tombol Reset X/Y terkompresi atau teks tombol hilang di Windows.
+- Tab **Tentang** Windows memakai tema gelap konsisten (#151822) dan bisa di-*scroll*, seluruh teks profil, status pembaruan, dan tautan terbaca jelas.
+- Uninstaller Windows (`Uninstall.exe` / `Setup.exe --uninstall`) memindahkan proses dirinya ke `%TEMP%` secara otomatis sehingga folder instalasi `C:\ixsland` terhapus bersih tanpa terkunci berkas eksekutabel.
+- Tombol **Batal** pada dialog Pengaturan Windows mengembalikan skala, transparansi, posisi, dan status kunci seperti semula.
+- Path ikon autostart Linux menunjuk ke `~/.local/share/ixsland/icon.png` (sebelumnya menunjuk folder temp PyInstaller yang bisa hilang).
+- `install.sh` selalu me-*restart* layanan, sehingga versi terbaru langsung dipakai saat perbaruan pemasangan.
 
 ---
 

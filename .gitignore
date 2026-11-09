@@ -1,21 +1,13 @@
-# Byte-compiled / optimized / DLL files
+# PyInstaller build artifacts
+build/
+dist/
+*.spec
 __pycache__/
-*.py[cod]
-*$py.class
+*.pyc
 
-# Cache and local runtime
+# local backups & logs
+ixsland.py.bak
 *.log
-/tmp/
+
+# runtime config
 config.json
-
-# Audio and large promo video renders (use Releases for full MP4)
-*.m4a
-*.oga
-*.mp3
-*.mp4
-!assets/demo_preview.gif
-
-# System & IDE
-.DS_Store
-.vscode/
-.idea/

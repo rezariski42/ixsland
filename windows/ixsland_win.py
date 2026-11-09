@@ -15,6 +15,7 @@ Ported directly from Linux Wayland (ixsland.py) with 100% Visual & Feature Parit
 
 import sys
 import os
+import re
 import math
 import time
 import json
@@ -24,20 +25,20 @@ import urllib.request
 import threading
 import socket
 import queue
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 
 from PyQt6.QtCore import (
-    Qt, QTimer, QPoint, QRect, QRectF, QSize, QPointF,
+    Qt, QTimer, QPoint, QRect, QRectF, QSize, QPointF, QUrl,
     QVariantAnimation, QEasingCurve, pyqtSignal, pyqtSlot, QObject, QThread
 )
 from PyQt6.QtWidgets import (
     QApplication, QWidget, QGraphicsDropShadowEffect, QMenu, QSystemTrayIcon,
-    QDialog, QVBoxLayout, QHBoxLayout, QLabel, QSlider, QComboBox, QCheckBox,
-    QPushButton, QTabWidget, QGroupBox, QMessageBox
+    QDialog, QVBoxLayout, QHBoxLayout, QGridLayout, QLabel, QSlider, QComboBox, QCheckBox,
+    QPushButton, QTabWidget, QGroupBox, QMessageBox, QSpinBox, QScrollArea, QFrame
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QBrush, QPen, QPainterPath,
-    QFont, QPixmap, QAction, QRegion, QIcon, QCursor
+    QFont, QPixmap, QAction, QRegion, QIcon, QCursor, QDesktopServices
 )
 from PyQt6.QtNetwork import QTcpServer, QHostAddress
 
@@ -81,9 +82,15 @@ CITY_COORDINATES = {
     "Jayapura (WIT)": (-2.5337, 140.7181, 9.0)
 }
 
+APP_VERSION = "1.3.0"
+GITHUB_REPO = "rezariski/ixsland"
+UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
+
 DEFAULT_CONFIG = {
     "target_screen": "primary",
     "top_margin": 12,
+    "offset_x": 0,
+    "pos_locked": False,
     "scale": 1.0,
     "bg_opacity": 98,
     "enable_mascot": True,
@@ -93,7 +100,9 @@ DEFAULT_CONFIG = {
     "longitude": 106.8456,
     "timezone": 7.0,
     "pause_music_on_adzan": True,
-    "autostart": True
+    "autostart": True,
+    "enable_notifications": True,
+    "check_updates": True
 }
 
 def load_config():
@@ -164,6 +173,110 @@ def calculate_prayer_times(lat, lng, tz_offset, dt=None):
         ("Maghrib", min_to_str(maghrib_min), min_to_mins(maghrib_min)),
         ("Isya", min_to_str(isha_min), min_to_mins(isha_min))
     ]
+
+# --- HARDWARE HELPERS: BATTERY, PRIVACY DOT, FULLSCREEN ---
+def get_system_battery():
+    """Returns (has_battery, percent, is_charging). Desktop PC returns (False, 100, True)"""
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            class SYSTEM_POWER_STATUS(ctypes.Structure):
+                _fields_ = [
+                    ('ACLineStatus', ctypes.c_byte),
+                    ('BatteryFlag', ctypes.c_byte),
+                    ('BatteryLifePercent', ctypes.c_byte),
+                    ('SystemStatusFlag', ctypes.c_byte),
+                    ('BatteryLifeTime', ctypes.c_ulong),
+                    ('BatteryFullLifeTime', ctypes.c_ulong),
+                ]
+            sps = SYSTEM_POWER_STATUS()
+            if ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(sps)):
+                # BatteryFlag 128 means no system battery installed (Desktop PC)
+                if sps.BatteryFlag == 128 or sps.BatteryLifePercent == 255:
+                    return False, 100, (sps.ACLineStatus == 1)
+                pct = int(sps.BatteryLifePercent)
+                charging = (sps.ACLineStatus == 1)
+                return True, pct, charging
+        except Exception:
+            pass
+    return False, 100, True
+
+def check_windows_privacy_usage():
+    """Checks if Webcam or Microphone is currently actively used via Windows CapabilityAccessManager"""
+    cam_active = False
+    mic_active = False
+    if sys.platform != "win32":
+        return False, False
+    try:
+        import winreg
+        def is_device_active(reg_path):
+            try:
+                base_key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, reg_path)
+            except Exception:
+                return False
+            active = False
+            try:
+                i = 0
+                while True:
+                    sub_name = winreg.EnumKey(base_key, i)
+                    i += 1
+                    try:
+                        sub_key = winreg.OpenKey(base_key, sub_name)
+                        stop_time, _ = winreg.QueryValueEx(sub_key, "LastUsedTimeStop")
+                        if stop_time == 0:
+                            active = True
+                            sub_key.Close()
+                            break
+                        sub_key.Close()
+                    except Exception:
+                        pass
+            except OSError:
+                pass
+            base_key.Close()
+            return active
+
+        cam_active = is_device_active(r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam\NonPackaged") or \
+                     is_device_active(r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\webcam")
+        mic_active = is_device_active(r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone\NonPackaged") or \
+                     is_device_active(r"SOFTWARE\Microsoft\Windows\CurrentVersion\CapabilityAccessManager\ConsentStore\microphone")
+    except Exception:
+        pass
+    return cam_active, mic_active
+
+def is_foreground_fullscreen(self_hwnd):
+    """Detects if foreground window is fullscreen (e.g. DirectX Game or Fullscreen Video)"""
+    if sys.platform != "win32":
+        return False
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        fg = user32.GetForegroundWindow()
+        if not fg or fg == self_hwnd:
+            return False
+            
+        buf = ctypes.create_unicode_buffer(256)
+        user32.GetClassNameW(fg, buf, 256)
+        cls_name = buf.value
+        if cls_name in ("Shell_TrayWnd", "Progman", "WorkerW", "Windows.UI.Core.CoreWindow"):
+            return False
+            
+        rect = wintypes.RECT()
+        user32.GetWindowRect(fg, ctypes.byref(rect))
+        
+        app = QApplication.instance()
+        screen = app.primaryScreen() if app else None
+        if not screen:
+            return False
+        geom = screen.geometry()
+        
+        win_w = rect.right - rect.left
+        win_h = rect.bottom - rect.top
+        if win_w >= geom.width() and win_h >= geom.height() and rect.top <= 0 and rect.left <= 0:
+            return True
+    except Exception:
+        pass
+    return False
 
 # --- WINDOWS HARDWARE INTEROP (VOLUME & CAPS LOCK) ---
 _pycaw_vol_device = None
@@ -272,16 +385,6 @@ class CapsLockMonitorThread(QThread):
                 ("dwExtraInfo", ctypes.c_ulonglong)
             ]
 
-        def check_after_keystroke():
-            time.sleep(0.04)
-            try:
-                st = get_caps_lock_state()
-                if st != self.current_state:
-                    self.current_state = st
-                    self.capsChanged.emit(st)
-            except Exception:
-                pass
-
         def hook_proc(nCode, wParam, lParam):
             if nCode >= 0:
                 try:
@@ -291,7 +394,6 @@ class CapsLockMonitorThread(QThread):
                         if st != self.current_state:
                             self.current_state = st
                             self.capsChanged.emit(st)
-                        threading.Thread(target=check_after_keystroke, daemon=True).start()
                 except Exception:
                     pass
             return user32.CallNextHookEx(self._hook, nCode, wParam, lParam)
@@ -344,6 +446,452 @@ class CapsLockMonitorThread(QThread):
                     pass
         self.quit()
         self.wait(250)
+
+# --- WINDOWS TOAST NOTIFICATION READER (wpndatabase.db) ---
+# Windows stores every toast (Action Center entry) in a SQLite DB owned by
+# WpnUserService. The WinRT UserNotificationListener needs MSIX package identity
+# + the "userNotificationListener" capability + user consent, so an unpackaged
+# PyInstaller EXE can never use it. Reading the DB is the portable alternative.
+WPN_DB_ENV = "IXSLAND_WPN_DB"
+WPN_LOG_ENV = "IXSLAND_WPN_LOG"
+WPN_REPLAY_ENV = "IXSLAND_WPN_REPLAY"
+
+_TOAST_TEXT_RE = re.compile(r"<text\b[^>]*>(.*?)</text\s*>", re.IGNORECASE | re.DOTALL)
+_PUBLISHER_HASH_RE = re.compile(r"_[a-z0-9]{13}$")
+
+
+def wpn_debug_log(msg):
+    path = os.environ.get(WPN_LOG_ENV)
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("%s %s\n" % (datetime.now().strftime("%H:%M:%S.%f")[:-3], msg))
+    except Exception:
+        pass
+
+
+def get_wpn_database_path():
+    override = os.environ.get(WPN_DB_ENV)
+    if override:
+        return override
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    if not local_appdata:
+        return None
+    return os.path.join(local_appdata, "Microsoft", "Windows", "Notifications", "wpndatabase.db")
+
+
+def _strip_markup(text):
+    import html
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"\s+", " ", html.unescape(text)).strip()
+
+
+def parse_toast_payload(payload):
+    """Extract (title, body) from a Windows toast XML payload. Returns None if not a toast."""
+    if payload is None:
+        return None
+    if isinstance(payload, memoryview):
+        payload = payload.tobytes()
+    if isinstance(payload, (bytearray, bytes)):
+        raw = bytes(payload)
+        if raw.startswith(b"\xff\xfe") or raw.startswith(b"\xfe\xff"):
+            try:
+                text = raw.decode("utf-16")
+            except Exception:
+                text = raw.decode("utf-16-le", "ignore")
+        elif raw.startswith(b"\xef\xbb\xbf"):
+            text = raw[3:].decode("utf-8", "ignore")
+        elif raw and raw[0:1] == b"\x00":
+            text = raw.decode("utf-16-be", "ignore")
+        elif len(raw) > 4 and raw[1:2] == b"\x00" and raw[3:4] == b"\x00":
+            text = raw.decode("utf-16-le", "ignore")
+        else:
+            text = raw.decode("utf-8", "ignore")
+    else:
+        text = str(payload)
+    text = text.replace("\x00", "").strip()
+    if not text or "<" not in text:
+        return None
+    if "<toast" not in text.lower():
+        return None
+
+    parts = []
+    try:
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(text.encode("utf-8", "ignore"))
+        for el in root.iter():
+            tag = el.tag.rsplit("}", 1)[-1].lower() if isinstance(el.tag, str) else ""
+            if tag == "text" and el.text:
+                parts.append(el.text)
+    except Exception:
+        for chunk in _TOAST_TEXT_RE.findall(text):
+            parts.append(_strip_markup(chunk))
+
+    cleaned = [re.sub(r"\s+", " ", p).strip() for p in parts]
+    cleaned = [p for p in cleaned if p]
+    if not cleaned:
+        return None
+    title = cleaned[0][:160]
+    body = " · ".join(cleaned[1:])[:600] if len(cleaned) > 1 else ""
+    return title, body
+
+
+def pretty_app_name(primary_id):
+    """Turn a toast Handler PrimaryId (AUMID / task id / GUID) into a short label."""
+    if not primary_id:
+        return "Windows"
+    s = str(primary_id).strip()
+    if not s or s.startswith("{"):
+        return "Windows"
+    if "\\" in s:
+        s = s.rsplit("\\", 1)[-1]
+    if "!" in s:
+        head, tail = s.split("!", 1)
+        s = head if head else tail
+    s = _PUBLISHER_HASH_RE.sub("", s)
+    s = re.sub(r"\.exe$", "", s, flags=re.IGNORECASE)
+    if s.lower().startswith("microsoft."):
+        s = s[len("microsoft."):]
+    s = s.replace("Windows.", "Windows ").strip()
+    return s[:48] or "Windows"
+
+
+def _filetime_to_unix(value):
+    try:
+        v = int(value)
+    except Exception:
+        return 0.0
+    if v > 10 ** 15:
+        return v / 1e7 - 11644473600.0
+    if v > 10 ** 11:
+        return v / 1000.0
+    return 0.0
+
+
+def parse_version_tuple(v_str):
+    if not v_str:
+        return (0, 0, 0)
+    nums = re.findall(r"\d+", str(v_str))
+    return tuple(map(int, nums)) if nums else (0, 0, 0)
+
+
+# --- BACKGROUND GITHUB RELEASES UPDATE CHECKER ---
+class UpdateCheckerThread(QThread):
+    """Checks GitHub Releases for new ixsland versions in background."""
+    updateChecked = pyqtSignal(bool, str, str, str)  # has_update, remote_tag, release_url, release_notes
+
+    def __init__(self, parent=None, timeout=6):
+        super().__init__(parent)
+        self.timeout = timeout
+
+    def run(self):
+        req = urllib.request.Request(
+            UPDATE_CHECK_URL,
+            headers={
+                "User-Agent": f"ixsland-Windows/{APP_VERSION}",
+                "Accept": "application/vnd.github.v3+json"
+            }
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=self.timeout) as resp:
+                data = json.loads(resp.read().decode("utf-8", "ignore"))
+                tag = data.get("tag_name", "").strip()
+                url = data.get("html_url", f"https://github.com/{GITHUB_REPO}/releases/latest")
+                body = data.get("body", "")
+                remote_ver = parse_version_tuple(tag)
+                local_ver = parse_version_tuple(APP_VERSION)
+                has_update = remote_ver > local_ver
+                self.updateChecked.emit(has_update, tag or APP_VERSION, url, body or "")
+        except Exception as e:
+            self.updateChecked.emit(False, APP_VERSION, "", str(e))
+
+
+class WindowsToastWatcher(QThread):
+    """Polls the Windows toast SQLite DB and re-emits newly arrived toasts."""
+
+    toastReceived = pyqtSignal(str, str, str)  # app, title, body
+
+    def __init__(self, parent=None, db_path=None, poll_ms=1200):
+        super().__init__(parent)
+        self.db_path = db_path or get_wpn_database_path()
+        self.poll_ms = max(500, int(poll_ms))
+        self._running = True
+        self._sig = None
+        self._direct_ok = True
+        self._baseline_ready = False
+        self._last_order = 0
+        self._last_arrival = 0
+        self._seen = []
+        self._seen_set = set()
+        self._replay = 0
+        try:
+            self._replay = int(os.environ.get(WPN_REPLAY_ENV, "0") or 0)
+        except Exception:
+            self._replay = 0
+
+    # -- lifecycle -----------------------------------------------------
+    def run(self):
+        if (sys.platform != "win32" and not os.environ.get(WPN_DB_ENV)) or not self.db_path:
+            wpn_debug_log("watcher disabled (platform=%s db=%r)" % (sys.platform, self.db_path))
+            return
+        import sqlite3
+        wpn_debug_log("watcher start db=%s" % (self.db_path,))
+        while self._running:
+            try:
+                self._poll(sqlite3)
+            except Exception as exc:
+                wpn_debug_log("poll error %r" % (exc,))
+            end = time.time() + (self.poll_ms / 1000.0)
+            while self._running and time.time() < end:
+                time.sleep(0.08)
+        wpn_debug_log("watcher stopped")
+
+    def stop(self):
+        self._running = False
+        self.requestInterruption()
+        self.wait(2500)
+
+    # -- db access -----------------------------------------------------
+    def _signature(self):
+        try:
+            parts = []
+            for suffix in ("", "-wal", "-shm"):
+                p = self.db_path + suffix
+                if os.path.exists(p):
+                    st = os.stat(p)
+                    parts.append((suffix, st.st_size, int(st.st_mtime_ns)))
+            return tuple(parts) if parts else None
+        except Exception:
+            return None
+
+    @staticmethod
+    def _uri(path):
+        p = os.path.abspath(path).replace("\\", "/")
+        if p.startswith("/"):
+            return "file://" + p
+        return "file:///" + p
+
+    def _copy_stable(self, src, dst):
+        import shutil
+        wal_src = src + "-wal"
+        wal_dst = dst + "-wal"
+        shm_src = src + "-shm"
+        shm_dst = dst + "-shm"
+        for _ in range(4):
+            before = None
+            if os.path.exists(wal_src):
+                try:
+                    st = os.stat(wal_src)
+                    before = (st.st_size, int(st.st_mtime_ns))
+                except Exception:
+                    before = None
+            shutil.copy2(src, dst)
+            if os.path.exists(wal_src):
+                shutil.copy2(wal_src, wal_dst)
+                try:
+                    st = os.stat(wal_src)
+                    after = (st.st_size, int(st.st_mtime_ns))
+                except Exception:
+                    after = before
+                if before is None or before == after:
+                    if os.path.exists(shm_src):
+                        try:
+                            shutil.copy2(shm_src, shm_dst)
+                        except Exception:
+                            pass
+                    return
+            else:
+                if os.path.exists(shm_src):
+                    try:
+                        shutil.copy2(shm_src, shm_dst)
+                    except Exception:
+                        pass
+                return
+            time.sleep(0.03)
+
+    def _connect(self, sqlite3):
+        src = self.db_path
+        if not os.path.exists(src):
+            return None, None
+        if self._direct_ok:
+            try:
+                con = sqlite3.connect(
+                    self._uri(src) + "?mode=ro", uri=True, timeout=0.6
+                )
+                con.execute("PRAGMA busy_timeout=600")
+                con.execute("PRAGMA query_only=1")
+                con.execute("SELECT 1 FROM Notification LIMIT 1").fetchall()
+                return con, None
+            except Exception as exc:
+                self._direct_ok = False
+                wpn_debug_log("direct read-only open failed, falling back to copy: %r" % (exc,))
+        tmpdir = tempfile.mkdtemp(prefix="ixsland_wpn_")
+        dst = os.path.join(tmpdir, "wpndatabase.db")
+        self._copy_stable(src, dst)
+        con = sqlite3.connect(dst, timeout=1.0)
+        con.execute("PRAGMA busy_timeout=800")
+        return con, tmpdir
+
+    def _read_snapshot(self, sqlite3):
+        con, tmpdir = self._connect(sqlite3)
+        if con is None:
+            return None, None
+        try:
+            cur = con.cursor()
+            cur.execute("SELECT MAX([Order]), MAX([ArrivalTime]) FROM [Notification]")
+            row = cur.fetchone() or (0, 0)
+            max_order = int(row[0] or 0)
+            max_arrival = int(row[1] or 0)
+            return (max_order, max_arrival), cur
+        finally:
+            try:
+                con.close()
+            except Exception:
+                pass
+            if tmpdir:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
+
+    def _query_new(self, sqlite3):
+        con, tmpdir = self._connect(sqlite3)
+        rows = []
+        try:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT n.[Order], n.[Id], n.[HandlerId], n.[Payload], n.[ArrivalTime], "
+                "       n.[ExpiryTime], n.[Type], n.[Tag], n.[Group], h.[PrimaryId] "
+                "FROM [Notification] n "
+                "LEFT JOIN [NotificationHandler] h ON h.[RecordId] = n.[HandlerId] "
+                "WHERE n.[Order] > ? OR (n.[ArrivalTime] IS NOT NULL AND n.[ArrivalTime] > ?) "
+                "ORDER BY n.[Order] ASC LIMIT 40",
+                (self._last_order, self._last_arrival),
+            )
+            rows = cur.fetchall()
+        finally:
+            try:
+                con.close()
+            except Exception:
+                pass
+            if tmpdir:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
+        return rows
+
+    def _query_recent(self, sqlite3, limit):
+        con, tmpdir = self._connect(sqlite3)
+        rows = []
+        try:
+            cur = con.cursor()
+            cur.execute(
+                "SELECT n.[Order], n.[Id], n.[HandlerId], n.[Payload], n.[ArrivalTime], "
+                "       n.[ExpiryTime], n.[Type], n.[Tag], n.[Group], h.[PrimaryId] "
+                "FROM [Notification] n "
+                "LEFT JOIN [NotificationHandler] h ON h.[RecordId] = n.[HandlerId] "
+                "ORDER BY n.[Order] DESC LIMIT ?",
+                (int(limit),),
+            )
+            rows = list(reversed(cur.fetchall()))
+        finally:
+            try:
+                con.close()
+            except Exception:
+                pass
+            if tmpdir:
+                import shutil
+                shutil.rmtree(tmpdir, ignore_errors=True)
+        return rows
+
+    def _enabled_for_toast(self, curry, handler_id):
+        if handler_id is None:
+            return True
+        try:
+            cur = curry.execute(
+                "SELECT [SettingKey], [Value] FROM [HandlerSettings] "
+                "WHERE [HandlerId] = ? AND [SettingKey] IN ('s:toast', 's:banner')",
+                (handler_id,),
+            )
+            found = {k: v for k, v in cur.fetchall()}
+        except Exception:
+            return True
+        if not found:
+            return True
+        return any(int(v or 0) != 0 for v in found.values())
+
+    # -- polling -------------------------------------------------------
+    def _poll(self, sqlite3):
+        sig = self._signature()
+        if sig is None:
+            return
+        if sig == self._sig:
+            return
+        self._sig = sig
+
+        if not self._baseline_ready:
+            self._baseline_ready = True
+            if self._replay <= 0:
+                con, tmpdir = self._connect(sqlite3)
+                try:
+                    cur = con.cursor()
+                    cur.execute("SELECT MAX([Order]), MAX([ArrivalTime]) FROM [Notification]")
+                    row = cur.fetchone() or (0, 0)
+                    self._last_order = int(row[0] or 0)
+                    self._last_arrival = int(row[1] or 0)
+                finally:
+                    try:
+                        con.close()
+                    except Exception:
+                        pass
+                    if tmpdir:
+                        import shutil
+                        shutil.rmtree(tmpdir, ignore_errors=True)
+                wpn_debug_log("baseline order=%d arrival=%d" % (self._last_order, self._last_arrival))
+                return
+            rows = self._query_recent(sqlite3, self._replay)
+        else:
+            rows = self._query_new(sqlite3)
+
+        if not rows:
+            return
+
+        now = time.time()
+        for row in rows:
+            (order, notif_id, handler_id, payload, arrival,
+             expiry, ntype, tag, group, primary_id) = (list(row) + [None] * 10)[:10]
+            order = int(order or 0)
+            arrival = int(arrival or 0)
+            if order > self._last_order:
+                self._last_order = order
+            if arrival > self._last_arrival:
+                self._last_arrival = arrival
+
+            key = (handler_id, notif_id, arrival)
+            if key in self._seen_set:
+                continue
+            self._seen.append(key)
+            self._seen_set.add(key)
+            if len(self._seen) > 400:
+                old = self._seen.pop(0)
+                self._seen_set.discard(old)
+
+            if expiry:
+                exp = _filetime_to_unix(expiry)
+                if exp and exp < now - 5:
+                    wpn_debug_log("skip expired order=%d" % order)
+                    continue
+
+            parsed = parse_toast_payload(payload)
+            if not parsed:
+                wpn_debug_log("skip non-toast order=%d type=%r payload=%r" % (order, ntype, (payload or "")[:60]))
+                continue
+
+            title, body = parsed
+            if not title and not body:
+                continue
+
+            app_name = pretty_app_name(primary_id)
+            wpn_debug_log("emit order=%d app=%r title=%r body=%r" % (order, app_name, title[:60], body[:60]))
+            self.toastReceived.emit(app_name, title, body or "")
 
 # --- COMPREHENSIVE AUDIO SOURCE & APP RECOGNITION ---
 def detect_player_source(app_id: str, title: str = "", artist: str = ""):
@@ -789,15 +1337,53 @@ class HiddenTriggerWidget(QWidget):
     def __init__(self, parent_island):
         super().__init__(None)
         self.island = parent_island
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.Tool |
+            Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.resize(130, 8)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
         self.setToolTip("Dynamic Island diminimalkan\nSentuh kursor atau klik di sini untuk memunculkan")
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hwnd = int(self.winId())
+                GWL_EXSTYLE = -20
+                WS_EX_NOACTIVATE = 0x08000000
+                cur_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                if not (cur_style & WS_EX_NOACTIVATE):
+                    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, cur_style | WS_EX_NOACTIVATE)
+                    ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037)
+            except Exception:
+                pass
+
+    def nativeEvent(self, event_type, message):
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                msg = wintypes.MSG.from_address(int(message))
+                WM_MOUSEACTIVATE = 0x0021
+                MA_NOACTIVATE = 3
+                if msg.message == WM_MOUSEACTIVATE:
+                    return True, MA_NOACTIVATE
+            except Exception:
+                pass
+        return False, 0
+
+    def keyPressEvent(self, event):
+        event.ignore()
+
+    def keyReleaseEvent(self, event):
+        event.ignore()
 
     def enterEvent(self, event):
         self.island.toggle_minimize()
@@ -823,6 +1409,11 @@ class SettingsDialog(QDialog):
         self.cfg = self.island.cfg.copy()
         self.orig_bg_opacity = self.island.cfg.get("bg_opacity", 98)
         self.orig_scale = self.island.cfg.get("scale", 1.0)
+        self.orig_offset_x = self.island.cfg.get("offset_x", 0)
+        self.orig_top_margin = self.island.cfg.get("top_margin", 12)
+        self.orig_pos_locked = self.island.cfg.get("pos_locked", False)
+        self._suppress_pos = False
+        self._saved = False
 
         self.setWindowTitle("Pengaturan Dynamic Island")
         icon_path = os.path.join(ASSETS_DIR, "icon.png")
@@ -831,8 +1422,10 @@ class SettingsDialog(QDialog):
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
-        self.resize(520, 480)
-        self.setMinimumSize(480, 420)
+        # Lebar cukup supaya 6 tab muat tanpa tombol scroll dan tanpa label
+        # tab yang terpotong ("…").
+        self.resize(760, 570)
+        self.setMinimumSize(700, 520)
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowCloseButtonHint | Qt.WindowType.WindowStaysOnTopHint)
         self.setStyleSheet("""
             QDialog {
@@ -848,7 +1441,7 @@ class SettingsDialog(QDialog):
             QTabBar::tab {
                 background: #0E1016;
                 color: #A0A5B5;
-                padding: 10px 18px;
+                padding: 9px 14px;
                 border-top-left-radius: 6px;
                 border-top-right-radius: 6px;
                 margin-right: 4px;
@@ -967,17 +1560,81 @@ class SettingsDialog(QDialog):
         layout.addLayout(hdr_layout)
 
         tabs = QTabWidget()
+        # Lebar tab mengikuti teksnya penuh (tanpa "…"), bukan dibagi rata;
+        # tombol scroll hanya muncul kalau ruang benar-benar habis.
+        tabs.tabBar().setExpanding(False)
+        tabs.tabBar().setUsesScrollButtons(True)
+        tabs.tabBar().setElideMode(Qt.TextElideMode.ElideNone)
         layout.addWidget(tabs)
 
-        # --- TAB 1: TAMPILAN & SKALA ---
+        # --- TAB 1: TAMPILAN & POSISI ---
         tab_view = QWidget()
         v_box = QVBoxLayout(tab_view)
+
+        grp_pos = QGroupBox("Penataan & Posisi (Position & Drag)")
+        p_lay = QVBoxLayout(grp_pos)
+
+        self.btn_lock = QPushButton()
+        self.btn_lock.clicked.connect(self.on_toggle_lock)
+        p_lay.addWidget(self.btn_lock)
+
+        self.lbl_lock_status = QLabel()
+        p_lay.addWidget(self.lbl_lock_status)
+
+        grid_pos = QGridLayout()
+        grid_pos.setSpacing(8)
+        grid_pos.addWidget(QLabel("Geser Horizontal (X):"), 0, 0)
+        self.spin_x = QSpinBox()
+        self.spin_x.setRange(-4000, 4000)
+        self.spin_x.setSuffix(" px")
+        self.spin_x.setValue(int(self.island.cfg.get("offset_x", 0)))
+        self.spin_x.valueChanged.connect(self.on_pos_changed)
+        grid_pos.addWidget(self.spin_x, 0, 1)
+        btn_rx = QPushButton("Reset X")
+        btn_rx.clicked.connect(lambda: self.spin_x.setValue(0))
+        grid_pos.addWidget(btn_rx, 0, 2)
+
+        grid_pos.addWidget(QLabel("Jarak dari Atas (Y):"), 1, 0)
+        self.spin_y = QSpinBox()
+        self.spin_y.setRange(0, 2000)
+        self.spin_y.setSuffix(" px")
+        self.spin_y.setValue(int(self.island.cfg.get("top_margin", 12)))
+        self.spin_y.valueChanged.connect(self.on_pos_changed)
+        grid_pos.addWidget(self.spin_y, 1, 1)
+        btn_ry = QPushButton("Reset Y")
+        btn_ry.clicked.connect(lambda: self.spin_y.setValue(12))
+        grid_pos.addWidget(btn_ry, 1, 2)
+
+        grid_pos.addWidget(QLabel("Layar Target (Screen):"), 2, 0)
+        self.cb_screen = QComboBox()
+        screens = QApplication.screens()
+        for s in screens:
+            self.cb_screen.addItem(s.name())
+        cur_screen = getattr(self.island, "target_screen_name", None)
+        if cur_screen in [s.name() for s in screens]:
+            self.cb_screen.setCurrentText(cur_screen)
+        self.cb_screen.currentTextChanged.connect(self.on_screen_changed)
+        grid_pos.addWidget(self.cb_screen, 2, 1)
+        btn_center = QPushButton("Tengahkan")
+        btn_center.clicked.connect(self.on_reset_position)
+        grid_pos.addWidget(btn_center, 2, 2)
+        # Kolom input diberi ruang lebar penuh, tombol reset cukup 1 baris
+        grid_pos.setColumnStretch(1, 1)
+        self.spin_x.setMinimumWidth(140)
+        self.spin_y.setMinimumWidth(140)
+        self.cb_screen.setMinimumWidth(160)
+        btn_rx.setMinimumWidth(96)
+        btn_ry.setMinimumWidth(96)
+        btn_center.setMinimumWidth(104)
+        p_lay.addLayout(grid_pos)
+
+        v_box.addWidget(grp_pos)
 
         grp_scale = QGroupBox("Skala Ukuran (Island Size)")
         sc_lay = QVBoxLayout(grp_scale)
         self.lbl_scale = QLabel(f"Ukuran Saat Ini: {int(self.cfg.get('scale', 1.0) * 100)}%")
         self.slider_scale = QSlider(Qt.Orientation.Horizontal)
-        self.slider_scale.setRange(80, 150)
+        self.slider_scale.setRange(50, 150)
         self.slider_scale.setValue(int(self.cfg.get('scale', 1.0) * 100))
         self.slider_scale.valueChanged.connect(self.on_scale_slide)
         sc_lay.addWidget(self.lbl_scale)
@@ -998,6 +1655,8 @@ class SettingsDialog(QDialog):
         v_box.addStretch()
         tabs.addTab(tab_view, "Tampilan")
 
+        self.update_lock_ui()
+
         # --- TAB 2: FITUR & ANIMASI ---
         tab_feat = QWidget()
         f_box = QVBoxLayout(tab_feat)
@@ -1013,6 +1672,26 @@ class SettingsDialog(QDialog):
         self.chk_adzan_pause = QCheckBox("Jeda Musik Otomatis saat Waktu Sholat Tiba (Adzan)")
         self.chk_adzan_pause.setChecked(self.cfg.get("pause_music_on_adzan", True))
         f_box.addWidget(self.chk_adzan_pause)
+
+        self.chk_clipboard_bubble = QCheckBox("Notifikasi Bubble saat Menyalin Teks (Clipboard Bubble)")
+        self.chk_clipboard_bubble.setChecked(self.cfg.get("enable_clipboard_bubble", True))
+        f_box.addWidget(self.chk_clipboard_bubble)
+
+        self.chk_game_mode = QCheckBox("Game Mode (Otomatis Sembunyi saat Game / Video Fullscreen)")
+        self.chk_game_mode.setChecked(self.cfg.get("enable_game_mode", True))
+        f_box.addWidget(self.chk_game_mode)
+
+        self.chk_battery_alert = QCheckBox("Indikator Daya Baterai & Charger (Laptop)")
+        self.chk_battery_alert.setChecked(self.cfg.get("enable_battery_alert", True))
+        f_box.addWidget(self.chk_battery_alert)
+
+        self.chk_privacy_dot = QCheckBox("Privacy Dot (Indikator Hijau/Oranye saat Kamera/Mic Aktif)")
+        self.chk_privacy_dot.setChecked(self.cfg.get("enable_privacy_dot", True))
+        f_box.addWidget(self.chk_privacy_dot)
+
+        self.chk_notif = QCheckBox("Notifikasi Sistem Windows (Toast / Action Center)")
+        self.chk_notif.setChecked(self.cfg.get("enable_notifications", True))
+        f_box.addWidget(self.chk_notif)
 
         f_box.addStretch()
         tabs.addTab(tab_feat, "Fitur & Perilaku")
@@ -1053,6 +1732,180 @@ class SettingsDialog(QDialog):
         s_box.addStretch()
         tabs.addTab(tab_sys, "Sistem")
 
+        # --- TAB 5: UJI FITUR & DEMO ---
+        tab_test = QWidget()
+        t_box = QVBoxLayout(tab_test)
+
+        lbl_test_hint = QLabel("Uji coba langsung animasi & notifikasi Dynamic Island di layar:")
+        lbl_test_hint.setStyleSheet("color: #00D4FF; font-weight: bold; margin-bottom: 6px;")
+        t_box.addWidget(lbl_test_hint)
+
+        test_grid = QGridLayout()
+        test_grid.setSpacing(10)
+
+        btn_t_prayer = QPushButton("🕌 Test Adzan Ashar")
+        btn_t_prayer.clicked.connect(lambda: self.island.trigger_prayer_alert("Ashar"))
+        test_grid.addWidget(btn_t_prayer, 0, 0)
+
+        btn_t_charger = QPushButton("⚡ Test Charger (85%)")
+        btn_t_charger.clicked.connect(lambda: self.island.trigger_battery_alert(85, True))
+        test_grid.addWidget(btn_t_charger, 0, 1)
+
+        btn_t_lowbat = QPushButton("🪫 Test Baterai Lemah (15%)")
+        btn_t_lowbat.clicked.connect(lambda: self.island.trigger_battery_alert(15, False))
+        test_grid.addWidget(btn_t_lowbat, 1, 0)
+
+        btn_t_privacy = QPushButton("🟢 Test Privacy Dot (Cam/Mic)")
+        btn_t_privacy.clicked.connect(self.island.toggle_privacy_demo)
+        test_grid.addWidget(btn_t_privacy, 1, 1)
+
+        btn_t_clip = QPushButton("📋 Test Clipboard Bubble")
+        btn_t_clip.clicked.connect(lambda: self.island.trigger_clipboard_bubble("https://github.com/rezariski"))
+        test_grid.addWidget(btn_t_clip, 2, 0)
+
+        btn_t_vol = QPushButton("🔊 Test Volume Overboost")
+        btn_t_vol.clicked.connect(lambda: self.island.trigger_volume_osd(125, False))
+        test_grid.addWidget(btn_t_vol, 2, 1)
+
+        btn_t_media = QPushButton("🎵 Test Media Player")
+        btn_t_media.clicked.connect(self.run_test_media)
+        test_grid.addWidget(btn_t_media, 3, 0)
+
+        btn_t_caps = QPushButton("🔤 Test Caps Lock OSD")
+        btn_t_caps.clicked.connect(lambda: self.island.trigger_caps_osd(True))
+        test_grid.addWidget(btn_t_caps, 3, 1)
+
+        btn_t_notif = QPushButton("💬 Test Notifikasi Chat")
+        btn_t_notif.clicked.connect(lambda: self.island.trigger_notification("WhatsApp", "Budi Santoso", "Halo! Notifikasi Windows berhasil terbaca di Dynamic Island."))
+        test_grid.addWidget(btn_t_notif, 4, 0)
+
+        btn_t_email = QPushButton("📩 Test Notifikasi Email")
+        btn_t_email.clicked.connect(lambda: self.island.trigger_notification("Outlook", "Reza Riski", "Update commit ixsland Windows siap direview."))
+        test_grid.addWidget(btn_t_email, 4, 1)
+
+        btn_t_update = QPushButton("🚀 Test Notif Update Baru")
+        btn_t_update.clicked.connect(self.island.trigger_update_demo)
+        test_grid.addWidget(btn_t_update, 5, 0)
+
+        btn_t_chk = QPushButton("🔍 Cek Update GitHub Asli")
+        btn_t_chk.clicked.connect(self.on_check_update_clicked)
+        test_grid.addWidget(btn_t_chk, 5, 1)
+
+        t_box.addLayout(test_grid)
+
+        btn_t_reset = QPushButton("↩ Kembalikan ke Normal (IDLE)")
+        btn_t_reset.setStyleSheet("background-color: #2D3139; color: #FFFFFF; font-weight: bold; padding: 7px;")
+        btn_t_reset.clicked.connect(self.island.collapse_to_base_mode)
+        t_box.addWidget(btn_t_reset)
+
+        t_box.addStretch()
+        tabs.addTab(tab_test, "Uji Fitur")
+
+        # --- TAB 6: TENTANG AUTHOR (isi di-scroll supaya tidak ada teks terpotong) ---
+        tab_about = QWidget()
+        lay_about = QVBoxLayout(tab_about)
+        lay_about.setContentsMargins(0, 0, 0, 0)
+        about_scroll = QScrollArea()
+        about_scroll.setWidgetResizable(True)
+        about_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        about_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # Background scroll harus gelap: palet default Windows terang sehingga
+        # teks putih/abu di tab Tentang menjadi tak terbaca di atasnya.
+        about_scroll.setStyleSheet(
+            "QScrollArea { background-color: #151822; border: none; }"
+            "QScrollArea > QWidget { background-color: #151822; }"
+        )
+        about_inner = QWidget()
+        about_inner.setObjectName("aboutInner")
+        about_inner.setStyleSheet("QWidget#aboutInner { background-color: #151822; }")
+        a_box = QVBoxLayout(about_inner)
+        a_box.setContentsMargins(4, 4, 4, 4)
+
+        head_lay = QHBoxLayout()
+        logo_lbl = QLabel()
+        logo_path = os.path.join(ASSETS_DIR, "icon.png")
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path).scaled(58, 58, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            logo_lbl.setPixmap(pix)
+        else:
+            logo_lbl.setText("🏝️")
+            logo_lbl.setStyleSheet("font-size: 38px;")
+        head_lay.addWidget(logo_lbl)
+
+        title_lay = QVBoxLayout()
+        lbl_app_name = QLabel("ixsland Dynamic Island")
+        lbl_app_name.setStyleSheet("font-size: 14pt; font-weight: bold; color: #FFFFFF;")
+        lbl_app_ver = QLabel(f"Version {APP_VERSION} (Windows Native Edition)")
+        lbl_app_ver.setStyleSheet("font-size: 9pt; color: #00D4FF;")
+        title_lay.addWidget(lbl_app_name)
+        title_lay.addWidget(lbl_app_ver)
+        head_lay.addLayout(title_lay)
+        head_lay.addStretch()
+        a_box.addLayout(head_lay)
+
+        grp_update = QGroupBox("Pembaruan Perangkat Lunak (Updates)")
+        up_lay = QVBoxLayout(grp_update)
+
+        up_info_lay = QHBoxLayout()
+        self.lbl_update_status = QLabel(f"Versi Terpasang: v{APP_VERSION} (Terbaru)")
+        self.lbl_update_status.setStyleSheet("color: #00E676; font-size: 9pt;")
+        up_info_lay.addWidget(self.lbl_update_status)
+        up_info_lay.addStretch()
+
+        self.btn_check_update = QPushButton("🔄 Periksa Pembaruan")
+        self.btn_check_update.setStyleSheet("background-color: #1F232B; border: 1px solid #383F4D; padding: 5px 12px;")
+        self.btn_check_update.clicked.connect(self.on_check_update_clicked)
+        up_info_lay.addWidget(self.btn_check_update)
+        up_lay.addLayout(up_info_lay)
+
+        self.chk_auto_update = QCheckBox("Periksa pembaruan secara otomatis saat aplikasi dibuka")
+        self.chk_auto_update.setChecked(self.cfg.get("check_updates", True))
+        up_lay.addWidget(self.chk_auto_update)
+
+        a_box.addWidget(grp_update)
+
+        grp_author = QGroupBox("Profil Pembuat")
+        auth_lay = QVBoxLayout(grp_author)
+
+        lbl_name = QLabel("Pembuat: Reza Riski (@rezariski)")
+        lbl_name.setStyleSheet("font-size: 10pt; font-weight: bold; color: #FFFFFF;")
+        auth_lay.addWidget(lbl_name)
+
+        lbl_role = QLabel("Peran: Creator & Lead Developer")
+        lbl_role.setStyleSheet("color: #00E676; font-size: 9pt;")
+        auth_lay.addWidget(lbl_role)
+
+        lbl_bio = QLabel(
+            "Software developer & system architect, fokus pada utilitas desktop interaktif, "
+            "integrasi antarmuka modern, dan otomasi sistem untuk Windows dan Linux."
+        )
+        lbl_bio.setWordWrap(True)
+        lbl_bio.setStyleSheet("color: #B0B8C8; margin-top: 6px; line-height: 140%;")
+        auth_lay.addWidget(lbl_bio)
+
+        link_box = QHBoxLayout()
+        btn_github = QPushButton("🌐 Profil GitHub")
+        btn_github.setStyleSheet("background-color: #1F232B; border: 1px solid #383F4D; padding: 6px 10px;")
+        btn_github.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski")))
+        link_box.addWidget(btn_github)
+
+        btn_repo = QPushButton("📦 Repositori ixsland")
+        btn_repo.setStyleSheet("background-color: #1F232B; border: 1px solid #383F4D; padding: 6px 10px;")
+        btn_repo.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski/ixsland")))
+        link_box.addWidget(btn_repo)
+        auth_lay.addLayout(link_box)
+
+        a_box.addWidget(grp_author)
+
+        lbl_copy = QLabel("Copyright © 2026 Reza Riski. Hak cipta dilindungi undang-undang.")
+        lbl_copy.setStyleSheet("color: #9AA0AE; font-size: 9pt; margin-top: 8px;")
+        a_box.addWidget(lbl_copy)
+
+        a_box.addStretch()
+        about_scroll.setWidget(about_inner)
+        lay_about.addWidget(about_scroll)
+        tabs.addTab(tab_about, "Tentang")
+
         # Bottom Button Row
         btn_box = QHBoxLayout()
         btn_box.addStretch()
@@ -1068,6 +1921,61 @@ class SettingsDialog(QDialog):
 
         layout.addLayout(btn_box)
 
+        # Tinggi jendela mengikuti kebutuhan konten tab terbesar.
+        # Tanpa ini, resize(760,570) memaksa layout memampatkan baris grid
+        # sehingga tombol jadi 18px (teks hilang) dan combo terpotong.
+        self.layout().activate()
+        best = self.sizeHint()
+        for i in range(tabs.count()):
+            tabs.setCurrentIndex(i)
+            self.layout().activate()
+            best = best.expandedTo(self.sizeHint())
+        tabs.setCurrentIndex(0)
+        self.layout().activate()
+        self.resize(max(760, best.width()), max(570, best.height()))
+        self.setMinimumSize(max(700, best.width()), max(520, best.height()))
+
+    # --- POSITION / LOCK HANDLERS (identik dengan Linux) ---
+    def update_lock_ui(self):
+        locked = bool(self.island.cfg.get("pos_locked", False))
+        if locked:
+            self.btn_lock.setText("🔒 Posisi Terkunci — Klik untuk Buka Kunci Drag")
+            self.btn_lock.setStyleSheet("background-color: #3A2A12; border: 1px solid #FFB300; color: #FFD166; padding: 9px;")
+            self.lbl_lock_status.setText("Posisi terkunci rapat. Geser manual dinonaktifkan.")
+            self.lbl_lock_status.setStyleSheet("color: #FFB300; font-size: 11px; font-weight: bold;")
+        else:
+            self.btn_lock.setText("🔓 Posisi Terbuka — Klik untuk Kunci (Drag Aktif)")
+            self.btn_lock.setStyleSheet("background-color: #123A1E; border: 1px solid #00E676; color: #7CFFB2; padding: 9px;")
+            self.lbl_lock_status.setText("Posisi terbuka: tarik langsung di layar atau masukkan koordinat X/Y.")
+            self.lbl_lock_status.setStyleSheet("color: #00E676; font-size: 11px; font-weight: bold;")
+
+    def on_toggle_lock(self):
+        locked = not bool(self.island.cfg.get("pos_locked", False))
+        self.island.set_pos_locked(locked)
+        self.update_lock_ui()
+
+    def on_pos_changed(self):
+        if self._suppress_pos:
+            return
+        self.island.set_position_offset(offset_x=self.spin_x.value(), top_margin=self.spin_y.value())
+
+    def on_reset_position(self):
+        self._suppress_pos = True
+        self.spin_x.setValue(0)
+        self.spin_y.setValue(12)
+        self._suppress_pos = False
+        self.island.set_position_offset(offset_x=0, top_margin=12)
+
+    def on_screen_changed(self, name):
+        if name:
+            self.island.set_target_screen(name)
+
+    def sync_position_inputs(self, offset_x, top_margin):
+        self._suppress_pos = True
+        self.spin_x.setValue(int(offset_x))
+        self.spin_y.setValue(int(top_margin))
+        self._suppress_pos = False
+
     def on_scale_slide(self, v):
         self.lbl_scale.setText(f"Ukuran Saat Ini: {v}%")
         self.island.scale = v / 100.0
@@ -1081,28 +1989,86 @@ class SettingsDialog(QDialog):
         self.island.cfg["bg_opacity"] = v
         self.island.update()
 
+    def _restore_on_cancel(self):
+        """Kembalikan perubahan live (skala, transparansi, posisi, kunci) saat dialog dibatalkan."""
+        self.island.cfg["bg_opacity"] = self.orig_bg_opacity
+        self.island.scale = self.orig_scale
+        self.island.cfg["scale"] = self.orig_scale
+        self.island.cfg["offset_x"] = self.orig_offset_x
+        self.island.cfg["top_margin"] = self.orig_top_margin
+        self.island.cfg["pos_locked"] = self.orig_pos_locked
+        self.island.target_screen_name = self.island.cfg.get("target_screen", "primary")
+        self.island.init_placement()
+        self.island.update_mask_for_mode()
+        self.island.update()
+        save_config(self.island.cfg)
+
     def closeEvent(self, event):
+        if not getattr(self, "_saved", False):
+            self._restore_on_cancel()
         self.island.settings_dialog = None
         super().closeEvent(event)
 
     def reject(self):
-        self.island.cfg["bg_opacity"] = self.orig_bg_opacity
-        self.island.scale = self.orig_scale
-        self.island.cfg["scale"] = self.orig_scale
-        self.island.init_placement()
-        self.island.update_mask_for_mode()
-        self.island.update()
+        if not getattr(self, "_saved", False):
+            self._restore_on_cancel()
         self.island.settings_dialog = None
         super().reject()
+
+    def on_check_update_clicked(self):
+        self.lbl_update_status.setText("Sedang memeriksa rilis GitHub...")
+        self.lbl_update_status.setStyleSheet("color: #00D4FF; font-size: 9pt;")
+        self.btn_check_update.setEnabled(False)
+        self.island.check_for_updates(callback=self.on_update_result)
+
+    def on_update_result(self, has_update, tag, url, body):
+        self.btn_check_update.setEnabled(True)
+        if has_update:
+            self.lbl_update_status.setText(f"🚀 Versi {tag} tersedia!")
+            self.lbl_update_status.setStyleSheet("color: #FFB300; font-weight: bold; font-size: 9pt;")
+            self.btn_check_update.setText("🌐 Unduh Versi Baru")
+            try:
+                self.btn_check_update.clicked.disconnect()
+            except Exception:
+                pass
+            self.btn_check_update.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+        else:
+            if url:
+                self.lbl_update_status.setText(f"✓ Anda sudah menggunakan versi terbaru (v{APP_VERSION})")
+                self.lbl_update_status.setStyleSheet("color: #00E676; font-size: 9pt;")
+            else:
+                self.lbl_update_status.setText("Gagal memeriksa pembaruan (offline / rate limit).")
+                self.lbl_update_status.setStyleSheet("color: #FF5252; font-size: 9pt;")
+
+    def run_test_media(self):
+        self.island.media_ctrl.set_mock_track("Starboy", "The Weeknd ft. Daft Punk", None, 230)
+        self.island.mode = "EXPANDED_MEDIA"
+        self.island.expanded_at = time.time()
+        self.island.update_mode_targets()
+        self.island.auto_collapse_timer.start(12000)
 
     def save_and_apply(self):
         self.cfg["scale"] = self.slider_scale.value() / 100.0
         self.cfg["bg_opacity"] = self.slider_op.value()
+        # Posisi & layar diambil dari state live island (bisa berubah lewat drag/kunci)
+        self.cfg["offset_x"] = int(self.island.cfg.get("offset_x", 0))
+        self.cfg["top_margin"] = int(self.island.cfg.get("top_margin", 12))
+        self.cfg["pos_locked"] = bool(self.island.cfg.get("pos_locked", False))
+        self.cfg["target_screen"] = self.island.cfg.get("target_screen", "primary")
         self.orig_scale = self.cfg["scale"]
         self.orig_bg_opacity = self.cfg["bg_opacity"]
+        self.orig_offset_x = self.cfg["offset_x"]
+        self.orig_top_margin = self.cfg["top_margin"]
+        self.orig_pos_locked = self.cfg["pos_locked"]
         self.cfg["enable_mascot"] = self.chk_mascot.isChecked()
         self.cfg["enable_marquee"] = self.chk_marquee.isChecked()
         self.cfg["pause_music_on_adzan"] = self.chk_adzan_pause.isChecked()
+        self.cfg["enable_clipboard_bubble"] = self.chk_clipboard_bubble.isChecked()
+        self.cfg["enable_game_mode"] = self.chk_game_mode.isChecked()
+        self.cfg["enable_battery_alert"] = self.chk_battery_alert.isChecked()
+        self.cfg["enable_privacy_dot"] = self.chk_privacy_dot.isChecked()
+        self.cfg["enable_notifications"] = self.chk_notif.isChecked()
+        self.cfg["check_updates"] = self.chk_auto_update.isChecked()
         self.cfg["autostart"] = self.chk_autostart.isChecked()
 
         city_name = self.cb_city.currentText()
@@ -1138,6 +2104,7 @@ class SettingsDialog(QDialog):
 
         save_config(self.cfg)
         self.island.apply_config(self.cfg)
+        self._saved = True
         self.island.settings_dialog = None
         self.close()
 
@@ -1170,11 +2137,21 @@ class IxslandWidget(QWidget):
         self.hidden_trigger = None
         self.settings_dialog = None
 
+        # Posisi manual (drag & kunci) — identik dengan versi Linux
+        self.target_screen_name = self.cfg.get("target_screen", "primary")
+        self._drag_pending = False
+        self._dragging = False
+        self._drag_start_gpos = None
+        self._drag_start_geom = None
+        self._press_ctx = None
+
         # Base Window Flags
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
             Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
+            Qt.WindowType.Tool |
+            Qt.WindowType.WindowDoesNotAcceptFocus
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
@@ -1227,6 +2204,17 @@ class IxslandWidget(QWidget):
         self.active_notif = {}
         self.active_prayer_alert = None
 
+        # Windows Toast Notification Watcher (wpndatabase.db)
+        self.toast_watcher = None
+        if self.cfg.get("enable_notifications", True):
+            self.start_toast_watcher()
+
+        # GitHub Releases Update Checker
+        self.latest_update_info = None
+        self.update_checker = None
+        if self.cfg.get("check_updates", True):
+            QTimer.singleShot(8000, self.check_for_updates)
+
         # Media Hub Setup
         self.media_ctrl = WindowsMediaController()
         self.media_info = self.media_ctrl.current_info.copy()
@@ -1272,6 +2260,37 @@ class IxslandWidget(QWidget):
 
         self.anim = None
 
+        # Battery Indicator Setup
+        self.has_battery, self.battery_pct, self.battery_charging = get_system_battery()
+        self.last_battery_charging = self.battery_charging
+        self.last_battery_pct = self.battery_pct
+        self.battery_timer = QTimer(self)
+        self.battery_timer.timeout.connect(self.check_battery_status)
+        self.battery_timer.start(3500)
+
+        # Privacy Dot Setup (Green = Cam, Orange = Mic)
+        self.privacy_cam_active = False
+        self.privacy_mic_active = False
+        self.privacy_demo_active = False
+        self.privacy_timer = QTimer(self)
+        self.privacy_timer.timeout.connect(self.check_privacy_dots)
+        self.privacy_timer.start(2000)
+
+        # Clipboard Bubble Setup
+        self.last_clipboard_text = ""
+        self.clipboard_snippet = ""
+        app_inst = QApplication.instance()
+        if app_inst:
+            cb = app_inst.clipboard()
+            if cb:
+                cb.dataChanged.connect(self.on_clipboard_data_changed)
+
+        # Fullscreen / Game Mode Setup
+        self.is_hidden_by_fullscreen = False
+        self.fullscreen_timer = QTimer(self)
+        self.fullscreen_timer.timeout.connect(self.check_fullscreen_window)
+        self.fullscreen_timer.start(1500)
+
         # System Tray & Placement
         self.setup_system_tray()
         self.setup_ipc_server()
@@ -1285,6 +2304,68 @@ class IxslandWidget(QWidget):
     def cleanup(self):
         if hasattr(self, "caps_monitor") and self.caps_monitor:
             self.caps_monitor.stop()
+        self.stop_toast_watcher()
+        if hasattr(self, "update_checker") and self.update_checker and self.update_checker.isRunning():
+            self.update_checker.quit()
+            self.update_checker.wait(500)
+
+    def check_for_updates(self, callback=None):
+        if hasattr(self, "update_checker") and self.update_checker and self.update_checker.isRunning():
+            return
+        self.update_checker = UpdateCheckerThread(self)
+        def on_done(has_update, tag, url, body):
+            if has_update:
+                self.latest_update_info = {"version": tag, "url": url, "body": body}
+                self.trigger_notification(
+                    "Pembaruan Tersedia",
+                    f"Versi {tag} Dirilis",
+                    "Klik pulau untuk mengunduh versi terbaru."
+                )
+                if hasattr(self, "tray_icon") and self.tray_icon:
+                    self.tray_icon.showMessage(
+                        "Pembaruan ixsland Tersedia",
+                        f"Versi {tag} sudah tersedia di GitHub.",
+                        QSystemTrayIcon.MessageIcon.Information,
+                        4000
+                    )
+            if callback:
+                callback(has_update, tag, url, body)
+        self.update_checker.updateChecked.connect(on_done)
+        self.update_checker.start()
+
+    def trigger_update_demo(self):
+        demo_url = f"https://github.com/{GITHUB_REPO}/releases"
+        self.latest_update_info = {"version": "v1.3.0", "url": demo_url, "body": "Fitur baru: Update Checker & Toast Notifikasi"}
+        self.trigger_notification(
+            "Pembaruan Tersedia",
+            "Versi v1.3.0 Dirilis 🚀",
+            "Klik pulau ini untuk langsung membuka rilis terbaru."
+        )
+
+    def start_toast_watcher(self):
+        if self.toast_watcher and self.toast_watcher.isRunning():
+            return
+        try:
+            self.toast_watcher = WindowsToastWatcher(self)
+            self.toast_watcher.toastReceived.connect(self.on_toast_received)
+            self.toast_watcher.start()
+        except Exception:
+            self.toast_watcher = None
+
+    def stop_toast_watcher(self):
+        if self.toast_watcher:
+            try:
+                self.toast_watcher.stop()
+            except Exception:
+                pass
+            self.toast_watcher = None
+
+    def on_toast_received(self, app_name, title, body):
+        if not self.cfg.get("enable_notifications", True):
+            return
+        if getattr(self, "is_hidden_by_fullscreen", False):
+            return
+        self.trigger_notification(app_name, title, body)
 
     def apply_config(self, cfg):
         self.cfg = cfg
@@ -1293,6 +2374,10 @@ class IxslandWidget(QWidget):
         lng = cfg.get("longitude", 106.8456)
         tz = cfg.get("timezone", 7.0)
         self.prayer_times = calculate_prayer_times(lat, lng, tz)
+        if self.cfg.get("enable_notifications", True):
+            self.start_toast_watcher()
+        else:
+            self.stop_toast_watcher()
         self.init_placement()
         self.update()
 
@@ -1410,7 +2495,9 @@ class IxslandWidget(QWidget):
                         line = line.strip()
                         if line:
                             data = json.loads(line)
-                            self.handle_ipc_command(data)
+                            resp = self.handle_ipc_command(data)
+                            if resp is not None:
+                                sock.write((str(resp) + "\n").encode("utf-8"))
                 sock.write(b"OK\n")
                 sock.flush()
             except Exception:
@@ -1445,6 +2532,19 @@ class IxslandWidget(QWidget):
         elif cmd in ("prayer", "showPrayerAlert"):
             p = data.get("prayer") or (args[0] if args else "Dzuhur")
             self.trigger_prayer_alert(p)
+        elif cmd in ("battery", "showBattery"):
+            pct = int(data.get("percent", args[0] if args else 85))
+            chg = bool(data.get("charging", True))
+            self.trigger_battery_alert(pct, chg)
+        elif cmd in ("clipboard", "showClipboard"):
+            txt = data.get("text") or (args[0] if args else "https://github.com/rezariski")
+            self.trigger_clipboard_bubble(txt)
+        elif cmd in ("privacy", "togglePrivacy"):
+            self.toggle_privacy_demo()
+        elif cmd in ("checkUpdate", "update"):
+            self.check_for_updates()
+        elif cmd == "triggerUpdateDemo":
+            self.trigger_update_demo()
         elif cmd == "triggerMascotSmile":
             self.mode = "IDLE"
             self.idle_view_counter = 1
@@ -1456,6 +2556,10 @@ class IxslandWidget(QWidget):
             self.scale = sc
             self.init_placement()
             self.update()
+        elif cmd in ("expand", "triggerExpand"):
+            self.mode = "EXPANDED_MEDIA"
+            self.expanded_at = time.time()
+            self.update_mode_targets()
         elif cmd in ("triggerCollapse", "collapse"):
             self.mode = "IDLE"
             self.start_morph_animation(180, 36)
@@ -1472,11 +2576,51 @@ class IxslandWidget(QWidget):
             if self.is_minimized:
                 self.toggle_minimize()
             self.open_settings()
+        # --- Penataan posisi & kunci (paritas D-Bus versi Linux) ---
+        elif cmd in ("setPosLocked", "setPosLock"):
+            locked = bool(args[0] if args else data.get("locked", False))
+            self.set_pos_locked(locked)
+            return "locked=%s" % bool(self.cfg.get("pos_locked", False))
+        elif cmd in ("setPositionOffset", "setPos"):
+            ox = int(args[0] if args else data.get("x", 0))
+            oy = int(args[1] if len(args) > 1 else data.get("y", 12))
+            self.set_position_offset(offset_x=ox, top_margin=oy)
+            return self.geometry_string()
+        elif cmd == "setTargetScreen":
+            name = args[0] if args else data.get("screen", "primary")
+            self.set_target_screen(str(name))
+            return self.geometry_string()
+        elif cmd in ("debugGeometry", "getGeometry"):
+            return self.geometry_string()
+
+    def geometry_string(self):
+        s = self.get_target_screen()
+        g = s.geometry() if s else QRect()
+        w = self.frameGeometry()
+        return (
+            "screen=%s screenGeom=%d,%d,%d,%d win=%d,%d,%d,%d scale=%.2f "
+            "offset=%s,%s locked=%s target=%s mode=%s"
+            % (
+                (s.name() if s else "?"),
+                g.x(), g.y(), g.width(), g.height(),
+                w.x(), w.y(), w.width(), w.height(),
+                getattr(self, "scale", 1.0),
+                self.cfg.get("offset_x", 0), self.cfg.get("top_margin", 12),
+                bool(self.cfg.get("pos_locked", False)),
+                self.target_screen_name, self.mode,
+            )
+        )
 
     def get_target_screen(self):
         app = QApplication.instance()
         screens = app.screens()
-        return app.primaryScreen() if screens else None
+        target = self.target_screen_name or self.cfg.get("target_screen", "primary")
+        if target and target.lower() not in ("primary", "main", "default"):
+            for s in screens:
+                if s.name() == target:
+                    return s
+        primary = app.primaryScreen()
+        return primary if primary else (screens[0] if screens else None)
 
     def init_placement(self):
         screen = self.get_target_screen()
@@ -1486,11 +2630,64 @@ class IxslandWidget(QWidget):
         scale = getattr(self, "scale", 1.0)
         target_w = int(round(CANVAS_W * scale))
         target_h = int(round(CANVAS_H * scale))
+        offset_x = int(self.cfg.get("offset_x", 0))
         top_margin = int(round(self.cfg.get("top_margin", 12) * scale))
 
-        x = geo.x() + (geo.width() - target_w) // 2
+        x = geo.x() + (geo.width() - target_w) // 2 + offset_x
         y = geo.y() + top_margin
         self.setGeometry(x, y, target_w, target_h)
+
+    # --- PENATAAN & POSISI (port dari Linux) ---
+    def set_target_screen(self, name):
+        if not name:
+            return
+        self.target_screen_name = name
+        self.cfg["target_screen"] = name
+        save_config(self.cfg)
+        self.init_placement()
+        self.update_mask_for_mode()
+        self.update()
+
+    def set_pos_locked(self, locked):
+        locked = bool(locked)
+        self.cfg["pos_locked"] = locked
+        save_config(self.cfg)
+        self.update()
+        if self.settings_dialog:
+            try:
+                self.settings_dialog.update_lock_ui()
+            except Exception:
+                pass
+
+    def set_position_offset(self, offset_x=None, top_margin=None):
+        if offset_x is not None:
+            self.cfg["offset_x"] = int(offset_x)
+        if top_margin is not None:
+            self.cfg["top_margin"] = int(top_margin)
+        save_config(self.cfg)
+        self.init_placement()
+        self.update()
+
+    def reset_position(self):
+        self.set_position_offset(offset_x=0, top_margin=12)
+        if self.settings_dialog:
+            try:
+                self.settings_dialog.sync_position_inputs(0, 12)
+            except Exception:
+                pass
+
+    def _apply_offset_from_topleft(self, tl):
+        """Hitung ulang offset_x / top_margin dari posisi jendela terhadap layar target."""
+        s = self.get_target_screen()
+        if not s:
+            return
+        geo = s.geometry()
+        scale = getattr(self, "scale", 1.0)
+        target_w = int(round(CANVAS_W * scale))
+        center_x = geo.x() + (geo.width() - target_w) // 2
+        self.cfg["offset_x"] = int(tl.x()) - center_x
+        if scale > 0:
+            self.cfg["top_margin"] = int(round((tl.y() - geo.y()) / scale))
 
     def update_mask_for_mode(self):
         scale = getattr(self, "scale", 1.0)
@@ -1502,6 +2699,41 @@ class IxslandWidget(QWidget):
         # Mask only the visible pill area so desktop clicks pass through
         region = QRegion(pill_x - 4, pill_y - 2, pill_w + 8, pill_h + 8, QRegion.RegionType.Rectangle)
         self.setMask(region)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                hwnd = int(self.winId())
+                GWL_EXSTYLE = -20
+                WS_EX_NOACTIVATE = 0x08000000
+                cur_style = ctypes.windll.user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+                if not (cur_style & WS_EX_NOACTIVATE):
+                    ctypes.windll.user32.SetWindowLongW(hwnd, GWL_EXSTYLE, cur_style | WS_EX_NOACTIVATE)
+                    ctypes.windll.user32.SetWindowPos(hwnd, 0, 0, 0, 0, 0, 0x0037)
+            except Exception:
+                pass
+
+    def nativeEvent(self, event_type, message):
+        if sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                msg = wintypes.MSG.from_address(int(message))
+                WM_MOUSEACTIVATE = 0x0021
+                MA_NOACTIVATE = 3
+                if msg.message == WM_MOUSEACTIVATE:
+                    return True, MA_NOACTIVATE
+            except Exception:
+                pass
+        return False, 0
+
+    def keyPressEvent(self, event):
+        event.ignore()
+
+    def keyReleaseEvent(self, event):
+        event.ignore()
 
     def on_tick_1s(self):
         self.idle_view_counter += 1
@@ -1618,6 +2850,22 @@ class IxslandWidget(QWidget):
             else:
                 self.update()
 
+    def get_next_prayer(self, now=None):
+        if now is None:
+            now = datetime.now()
+        now_mins = now.hour * 60 + now.minute
+        for name, t_str, t_mins in self.prayer_times:
+            if t_mins > now_mins:
+                return name, t_str, t_mins
+
+        # If past Isya today, next prayer is Subuh tomorrow
+        lat = self.cfg.get("latitude", -6.2088)
+        lng = self.cfg.get("longitude", 106.8456)
+        tz = self.cfg.get("timezone", 7.0)
+        tomorrow_times = calculate_prayer_times(lat, lng, tz, dt=now.date() + timedelta(days=1))
+        sub_name, sub_str, sub_mins = tomorrow_times[0]
+        return sub_name, sub_str, sub_mins + 1440
+
     def update_mode_targets(self):
         has_media = bool(self.media_info.get("title")) and self.media_info.get("status") in ("Playing", "Paused")
         targets = {
@@ -1627,10 +2875,97 @@ class IxslandWidget(QWidget):
             "OSD_VOLUME": (210, 32),
             "CAPS_OSD": (196, 32),
             "NOTIFICATION": (260, 52),
-            "PRAYER_ALERT": (280, 50)
+            "PRAYER_ALERT": (280, 50),
+            "BATTERY_ALERT": (250, 48),
+            "CLIPBOARD_BUBBLE": (260, 44),
         }
         tw, th = targets.get(self.mode, (110, 30))
         self.animate_morph(tw, th)
+
+    def trigger_battery_alert(self, pct, charging):
+        self.battery_pct = pct
+        self.battery_charging = charging
+        if self.mode not in ("OSD_VOLUME", "CAPS_OSD", "PRAYER_ALERT"):
+            self.prev_mode = self.mode
+        self.mode = "BATTERY_ALERT"
+        self.update_mode_targets()
+        self.revert_timer.start(3800)
+
+    def trigger_clipboard_bubble(self, text):
+        if not text or not text.strip():
+            return
+        self.clipboard_snippet = text.strip()[:30]
+        if self.mode not in ("OSD_VOLUME", "CAPS_OSD", "PRAYER_ALERT", "BATTERY_ALERT"):
+            self.prev_mode = self.mode
+        self.mode = "CLIPBOARD_BUBBLE"
+        self.update_mode_targets()
+        self.revert_timer.start(2400)
+
+    def toggle_privacy_demo(self):
+        self.privacy_demo_active = not getattr(self, "privacy_demo_active", False)
+        self.privacy_cam_active = self.privacy_demo_active
+        self.privacy_mic_active = self.privacy_demo_active
+        self.update()
+
+    def check_battery_status(self):
+        if not self.cfg.get("enable_battery_alert", True):
+            return
+        has_bat, pct, charging = get_system_battery()
+        if not has_bat:
+            return
+        self.has_battery = True
+        if charging != getattr(self, "last_battery_charging", charging):
+            self.last_battery_charging = charging
+            self.last_battery_pct = pct
+            self.trigger_battery_alert(pct, charging)
+        elif pct <= 20 and not charging and getattr(self, "last_battery_pct", 100) > 20:
+            self.last_battery_pct = pct
+            self.trigger_battery_alert(pct, False)
+        else:
+            self.last_battery_pct = pct
+
+    def check_privacy_dots(self):
+        if getattr(self, "privacy_demo_active", False):
+            return
+        if not self.cfg.get("enable_privacy_dot", True):
+            if self.privacy_cam_active or self.privacy_mic_active:
+                self.privacy_cam_active = False
+                self.privacy_mic_active = False
+                self.update()
+            return
+        cam, mic = check_windows_privacy_usage()
+        if cam != self.privacy_cam_active or mic != self.privacy_mic_active:
+            self.privacy_cam_active = cam
+            self.privacy_mic_active = mic
+            self.update()
+
+    def on_clipboard_data_changed(self):
+        if not self.cfg.get("enable_clipboard_bubble", True):
+            return
+        app_inst = QApplication.instance()
+        if not app_inst:
+            return
+        cb = app_inst.clipboard()
+        if not cb:
+            return
+        text = cb.text()
+        if text and text != getattr(self, "last_clipboard_text", ""):
+            self.last_clipboard_text = text
+            self.trigger_clipboard_bubble(text)
+
+    def check_fullscreen_window(self):
+        if not self.cfg.get("enable_game_mode", True):
+            if getattr(self, "is_hidden_by_fullscreen", False):
+                self.is_hidden_by_fullscreen = False
+                self.show()
+            return
+        is_fs = is_foreground_fullscreen(int(self.winId()))
+        if is_fs and not self.is_hidden_by_fullscreen:
+            self.is_hidden_by_fullscreen = True
+            self.hide()
+        elif not is_fs and self.is_hidden_by_fullscreen:
+            self.is_hidden_by_fullscreen = False
+            self.show()
 
     def collapse_to_base_mode(self):
         if self.caps_lock_state:
@@ -1892,12 +3227,30 @@ class IxslandWidget(QWidget):
                     self.collapse_to_base_mode()
                 return
 
-            nx = (pos.x() - pill_x) / scale
-            ny = (pos.y() - pill_y) / scale
-            w = self.curr_pill_w
-            h = self.curr_pill_h
+            # Drag manual: hanya saat posisi terbuka dan mode ringkas
+            if (not self.cfg.get("pos_locked", False)
+                    and self.mode in ("IDLE", "COMPACT_MEDIA", "NOTIFICATION")):
+                self._drag_pending = True
+                self._dragging = False
+                self._drag_start_gpos = event.globalPosition().toPoint()
+                self._drag_start_geom = self.geometry()
+                self._press_ctx = (pos, pill_x, pill_y, pill_w, pill_h, scale)
+                return
 
-            if self.mode == "EXPANDED_MEDIA":
+            self._handle_left_click(pos, pill_x, pill_y, pill_w, pill_h, scale)
+        elif event.button() == Qt.MouseButton.MiddleButton:
+            self.media_ctrl.play_pause()
+        elif event.button() == Qt.MouseButton.RightButton:
+            if inside_pill:
+                self.show_context_menu(event.globalPosition().toPoint())
+
+    def _handle_left_click(self, pos, pill_x, pill_y, pill_w, pill_h, scale):
+        nx = (pos.x() - pill_x) / scale
+        ny = (pos.y() - pill_y) / scale
+        w = self.curr_pill_w
+        h = self.curr_pill_h
+
+        if self.mode == "EXPANDED_MEDIA":
                 # Top action buttons: Settings [⚙], Minimize [🗕]
                 if 4 <= ny <= 34:
                     if w - 30 <= nx <= w - 6:
@@ -1951,44 +3304,62 @@ class IxslandWidget(QWidget):
                         return
                 return
 
-            # Non-expanded modes
-            if self.mode == "IDLE":
-                if w >= 135:
-                    if w - 26 <= nx <= w - 4 and 4 <= ny <= 26:
-                        self.open_settings()
-                        return
-                    elif w - 48 <= nx <= w - 27 and 4 <= ny <= 26:
-                        self.toggle_minimize()
-                        return
-                self.mode = "EXPANDED_MEDIA"
-                self.expanded_at = time.time()
-                self.update_mode_targets()
-                return
+        # Non-expanded modes
+        if self.mode == "IDLE":
+            if w >= 135:
+                if w - 26 <= nx <= w - 4 and 4 <= ny <= 26:
+                    self.open_settings()
+                    return
+                elif w - 48 <= nx <= w - 27 and 4 <= ny <= 26:
+                    self.toggle_minimize()
+                    return
+            self.mode = "EXPANDED_MEDIA"
+            self.expanded_at = time.time()
+            self.update_mode_targets()
+            return
 
-            elif self.mode == "COMPACT_MEDIA":
-                self.mode = "EXPANDED_MEDIA"
-                self.expanded_at = time.time()
-                self.update_mode_targets()
-                return
+        elif self.mode == "COMPACT_MEDIA":
+            self.mode = "EXPANDED_MEDIA"
+            self.expanded_at = time.time()
+            self.update_mode_targets()
+            return
 
-            elif self.mode in ("OSD_VOLUME", "CAPS_OSD", "PRAYER_ALERT"):
-                self.revert_timer.stop()
+        elif self.mode in ("OSD_VOLUME", "CAPS_OSD", "PRAYER_ALERT"):
+            self.revert_timer.stop()
+            self.collapse_to_base_mode()
+            return
+
+        elif self.mode == "NOTIFICATION":
+            if getattr(self, "latest_update_info", None) and self.latest_update_info.get("url"):
+                QDesktopServices.openUrl(QUrl(self.latest_update_info["url"]))
+                self.latest_update_info = None
                 self.collapse_to_base_mode()
                 return
-
-            elif self.mode == "NOTIFICATION":
-                self.mode = "EXPANDED_MEDIA"
-                self.expanded_at = time.time()
-                self.update_mode_targets()
-                return
-
-        elif event.button() == Qt.MouseButton.MiddleButton:
-            self.media_ctrl.play_pause()
-        elif event.button() == Qt.MouseButton.RightButton:
-            if inside_pill:
-                self.show_context_menu(event.globalPosition().toPoint())
+            self.mode = "EXPANDED_MEDIA"
+            self.expanded_at = time.time()
+            self.update_mode_targets()
+            return
 
     def mouseMoveEvent(self, event):
+        gpos = event.globalPosition().toPoint()
+        if self._drag_pending:
+            if not self._dragging:
+                if (gpos - self._drag_start_gpos).manhattanLength() > 4:
+                    self._dragging = True
+            if self._dragging:
+                delta = gpos - self._drag_start_gpos
+                new_tl = self._drag_start_geom.topLeft() + delta
+                self.setGeometry(new_tl.x(), new_tl.y(), self.width(), self.height())
+                self._apply_offset_from_topleft(new_tl)
+                if self.settings_dialog:
+                    try:
+                        self.settings_dialog.sync_position_inputs(
+                            int(self.cfg.get("offset_x", 0)),
+                            int(self.cfg.get("top_margin", 12)))
+                    except Exception:
+                        pass
+                return
+
         scale = getattr(self, "scale", 1.0)
         pos = event.position()
         canvas_w = CANVAS_W * scale
@@ -2012,6 +3383,25 @@ class IxslandWidget(QWidget):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        if self._drag_pending:
+            if self._dragging:
+                save_config(self.cfg)
+                if self.settings_dialog:
+                    try:
+                        self.settings_dialog.sync_position_inputs(
+                            int(self.cfg.get("offset_x", 0)),
+                            int(self.cfg.get("top_margin", 12)))
+                    except Exception:
+                        pass
+            elif self._press_ctx is not None:
+                pos, pill_x, pill_y, pill_w, pill_h, scale = self._press_ctx
+                self._handle_left_click(pos, pill_x, pill_y, pill_w, pill_h, scale)
+            self._drag_pending = False
+            self._dragging = False
+            self._drag_start_gpos = None
+            self._drag_start_geom = None
+            self._press_ctx = None
+
         if getattr(self, "is_seeking", False):
             self.is_seeking = False
             self.update()
@@ -2042,6 +3432,15 @@ class IxslandWidget(QWidget):
         act_toggle = QAction("Play / Pause Musik", self)
         act_toggle.triggered.connect(self.media_ctrl.play_pause)
         menu.addAction(act_toggle)
+
+        locked = bool(self.cfg.get("pos_locked", False))
+        act_lock = QAction("🔓 Buka Kunci Posisi (Drag)" if locked else "🔒 Kunci Posisi (Cegah Geser)", self)
+        act_lock.triggered.connect(lambda: self.set_pos_locked(not self.cfg.get("pos_locked", False)))
+        menu.addAction(act_lock)
+
+        act_recenter = QAction("🔄 Reset Posisi Tengah", self)
+        act_recenter.triggered.connect(self.reset_position)
+        menu.addAction(act_recenter)
 
         act_min = QAction("👁️ Sembunyikan / Minimize Pulau", self)
         act_min.triggered.connect(self.toggle_minimize)
@@ -2096,6 +3495,10 @@ class IxslandWidget(QWidget):
             border_col = QColor(0, 230, 118, 140)
         elif self.mode == "PRAYER_ALERT":
             border_col = QColor(0, 180, 216, 200)
+        elif self.mode == "BATTERY_ALERT":
+            border_col = QColor(0, 230, 118, 180) if getattr(self, "battery_charging", True) else QColor(255, 68, 68, 180)
+        elif self.mode == "CLIPBOARD_BUBBLE":
+            border_col = QColor(0, 212, 255, 180)
 
         painter.strokePath(path, QPen(border_col, 1.2))
 
@@ -2121,6 +3524,24 @@ class IxslandWidget(QWidget):
             self.paint_notification(painter, w, h)
         elif self.mode == "PRAYER_ALERT":
             self.paint_prayer_alert(painter, w, h)
+        elif self.mode == "BATTERY_ALERT":
+            self.paint_battery_alert(painter, w, h)
+        elif self.mode == "CLIPBOARD_BUBBLE":
+            self.paint_clipboard_bubble(painter, w, h)
+
+        # Draw Privacy Dots (Camera: Neon Green, Microphone: Neon Orange)
+        if self.privacy_cam_active or self.privacy_mic_active:
+            dot_r = 2.5
+            dot_y = 7.0
+            cur_dot_x = w - 10.0
+            painter.setPen(Qt.PenStyle.NoPen)
+            if self.privacy_cam_active:
+                painter.setBrush(QBrush(QColor(0, 230, 118, 240)))
+                painter.drawEllipse(QPointF(cur_dot_x, dot_y), dot_r, dot_r)
+                cur_dot_x -= 8.0
+            if self.privacy_mic_active:
+                painter.setBrush(QBrush(QColor(255, 145, 0, 240)))
+                painter.drawEllipse(QPointF(cur_dot_x, dot_y), dot_r, dot_r)
 
         painter.restore()
 
@@ -2166,21 +3587,14 @@ class IxslandWidget(QWidget):
 
     def paint_idle_prayer(self, p, w, h):
         now = datetime.now()
-        next_prayer_name = "Dzuhur"
-        next_prayer_time = "12:05"
-        now_mins = now.hour * 60 + now.minute
-        for name, t_str, t_mins in self.prayer_times:
-            if t_mins > now_mins:
-                next_prayer_name = name
-                next_prayer_time = t_str
-                break
+        next_prayer_name, next_prayer_time, _ = self.get_next_prayer(now)
 
         # Soft cyan indicator dot on the left
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(QColor(0, 212, 255, 220)))
         p.drawEllipse(QPoint(14, int(h // 2)), 3, 3)
 
-        # Prayer time text e.g. "🕌 Dzuhur 12:05"
+        # Prayer time text e.g. "🕌 Subuh 04:15"
         p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
         p.setPen(QColor(230, 240, 255))
         prayer_str = f"🕌 {next_prayer_name} {next_prayer_time}"
@@ -2362,14 +3776,7 @@ class IxslandWidget(QWidget):
         p.drawText(QRect(info_x, 18, info_w, 20), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "ixsland Dynamic Island")
 
         now = datetime.now()
-        next_prayer_name = "Dzuhur"
-        next_prayer_time = "12:05"
-        now_mins = now.hour * 60 + now.minute
-        for name, t_str, t_mins in self.prayer_times:
-            if t_mins > now_mins:
-                next_prayer_name = name
-                next_prayer_time = t_str
-                break
+        next_prayer_name, next_prayer_time, _ = self.get_next_prayer(now)
 
         p.setFont(QFont("Segoe UI", 9, QFont.Weight.Normal))
         p.setPen(QColor(150, 160, 180))
@@ -2642,6 +4049,34 @@ class IxslandWidget(QWidget):
         p.setPen(QColor(220, 220, 225))
         p.drawText(QRect(14, 26, int(w - 28), 16), Qt.AlignmentFlag.AlignCenter, "Mari tunaikan sholat tepat waktu")
 
+    def paint_battery_alert(self, p, w, h):
+        charging = getattr(self, "battery_charging", True)
+        pct = getattr(self, "battery_pct", 100)
+        p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        if charging:
+            p.setPen(QColor(0, 230, 118))
+            p.drawText(QRect(14, 6, int(w - 28), 18), Qt.AlignmentFlag.AlignCenter, f"⚡ PENGISIAN DAYA {pct}%")
+            p.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
+            p.setPen(QColor(220, 220, 225))
+            p.drawText(QRect(14, 26, int(w - 28), 16), Qt.AlignmentFlag.AlignCenter, "Adaptor daya terhubung")
+        else:
+            p.setPen(QColor(255, 68, 68) if pct <= 20 else QColor(255, 179, 0))
+            p.drawText(QRect(14, 6, int(w - 28), 18), Qt.AlignmentFlag.AlignCenter, f"🪫 BATERAI LEMAH {pct}%" if pct <= 20 else f"🔋 SISA BATERAI {pct}%")
+            p.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
+            p.setPen(QColor(220, 220, 225))
+            p.drawText(QRect(14, 26, int(w - 28), 16), Qt.AlignmentFlag.AlignCenter, "Hubungkan ke charger sekarang" if pct <= 20 else "Berjalan pada daya baterai")
+
+    def paint_clipboard_bubble(self, p, w, h):
+        snippet = getattr(self, "clipboard_snippet", "")
+        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        p.setPen(QColor(0, 212, 255))
+        p.drawText(QRect(14, 5, int(w - 28), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, "📋 TEKS DISALIN")
+
+        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
+        p.setPen(QColor(240, 240, 245))
+        elided = p.fontMetrics().elidedText(snippet, Qt.TextElideMode.ElideRight, int(w - 28))
+        p.drawText(QRect(14, 23, int(w - 28), 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, elided)
+
 
 def check_single_instance():
     # 1. Try TCP IPC ping to existing instance
@@ -2657,14 +4092,15 @@ def check_single_instance():
     except Exception:
         pass
 
-    # 2. Win32 Named Mutex
+    # 2. Named Mutex fallback
     if sys.platform == "win32":
         try:
             import ctypes
-            mutex_name = "Global\\ixsland_dynamic_island_single_instance_mutex"
+            mutex_name = "ixsland_dynamic_island_single_instance_mutex"
             mutex = ctypes.windll.kernel32.CreateMutexW(None, False, mutex_name)
             last_err = ctypes.windll.kernel32.GetLastError()
             if last_err == 183: # ERROR_ALREADY_EXISTS
+                # Only exit if an active instance actually responds on IPC
                 try:
                     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                     s.settimeout(0.4)
@@ -2672,9 +4108,10 @@ def check_single_instance():
                     cmd = {"cmd": "settings"} if "--settings" in sys.argv else {"cmd": "activate"}
                     s.sendall(json.dumps(cmd).encode("utf-8") + b"\n")
                     s.close()
+                    sys.exit(0)
                 except Exception:
+                    # Stale mutex from previous run, ignore and continue
                     pass
-                sys.exit(0)
             return mutex
         except Exception:
             pass
@@ -2688,6 +4125,8 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     island = IxslandWidget()
     island.show()
+    if "--settings" in sys.argv:
+        island.open_settings()
     sys.exit(app.exec())
 
 if __name__ == "__main__":

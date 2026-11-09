@@ -1,9 +1,22 @@
 {
   "target_screen": "primary",
   "top_margin": 16,
+  "offset_x": 0,
+  "pos_locked": false,
+  "scale": 1.0,
+  "bg_opacity": 98,
+  "enable_mascot": true,
+  "enable_marquee": true,
   "latitude": -6.2088,
   "longitude": 106.8456,
   "timezone": 7.0,
   "city": "Jakarta (WIB)",
-  "pause_music_on_adzan": true
+  "pause_music_on_adzan": true,
+  "autostart": true,
+  "enable_notifications": true,
+  "enable_clipboard_bubble": true,
+  "enable_game_mode": true,
+  "enable_battery_alert": true,
+  "enable_privacy_dot": true,
+  "check_updates": true
 }
