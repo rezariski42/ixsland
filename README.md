@@ -314,7 +314,7 @@ Berkas konfigurasi tersimpan pada:
 - **Dialog Pengaturan**: seluruh tab, label, tombol Reset X/Y, dan pemilih layar tampil proporsional tanpa terpotong.
 - **Tab Tentang**: tema gelap kontras + scroll area, profil pengembang dan status rilis terbaca jelas.
 - **Pembersihan Uninstaller**: pencopotan pemasangan tuntas membersihkan folder instalasi, entri aplikasi, dan pintasan.
-- **Installer Windows**: dipadatkan agar unduh dan pasang lebih cepat.
+- **Installer Windows**: dipadatkan dari 85 MB menjadi ±50 MB agar unduh dan pasang lebih cepat.
 
 ---
 
