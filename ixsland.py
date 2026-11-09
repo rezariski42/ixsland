@@ -670,6 +670,10 @@ class KWinCursorTracker(QObject):
                     "org.kde.kwin.Script.run"
                 ], capture_output=True, timeout=3)
                 if proc.returncode == 0:
+                    subprocess.run([
+                        "qdbus6", "org.kde.KWin", "/Scripting",
+                        "org.kde.kwin.Scripting.start"
+                    ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=2)
                     print(f"[ixsland] script KWin dijalankan id={script_id} "
                           f"out={(proc.stdout or b'').decode(errors='replace').strip()[:120]!r}", flush=True)
                     return True
@@ -723,6 +727,7 @@ class KWinCursorTracker(QObject):
             function isIgnorableWin(w) {
                 try {
                     if (!w) return true;
+                    if (isIslandWin(w)) return true;
                     var rc = (w.resourceClass || "").toLowerCase();
                     if (rc === "plasmashell" || rc === "ksplashqml" || rc === "ksmserver" || rc === "kwin_wayland") return true;
                     if (w.desktopWindow) return true;
@@ -732,6 +737,7 @@ class KWinCursorTracker(QObject):
             }
             function reportActiveWin() {
                 try {
+                    placeAllIslands();
                     var a = workspace.activeWindow;
                     if (a && isIslandWin(a)) {
                         if (lastRealActive) {
@@ -753,28 +759,43 @@ class KWinCursorTracker(QObject):
             try { workspace.windowActivated.connect(reportActiveWin); } catch (e) {}
             reportActiveWin();
 
-            // --- Pin ixsland island windows to requested geometry (Wayland ignores client setGeometry) ---
+            // --- Pin ixsland island windows & ensure ALWAYS ON TOP (AboveLayer) across all desktops ---
             function isIslandWin(w) {
-                var c = (w && w.caption) ? w.caption : "";
-                return c.indexOf("IXSLAND:") === 0;
+                if (!w) return false;
+                var c = (w.caption || "");
+                return c.indexOf("IXSLAND") === 0;
             }
             function placeIslandWin(w) {
                 try {
                     if (!isIslandWin(w)) return;
-                    var parts = w.caption.substring(8).split(",");
-                    if (parts.length < 4) return;
-                    var x = parseInt(parts[0], 10);
-                    var y = parseInt(parts[1], 10);
-                    var ww = parseInt(parts[2], 10);
-                    var hh = parseInt(parts[3], 10);
-                    if (isNaN(x) || isNaN(y) || isNaN(ww) || isNaN(hh)) return;
-                    var fg = w.frameGeometry;
-                    if (fg.x !== x || fg.y !== y || fg.width !== ww || fg.height !== hh) {
-                        try {
-                            w.frameGeometry = { x: x, y: y, width: ww, height: hh };
-                        } catch (e1) {}
-                        if (lastRealActive) {
-                            try { workspace.activeWindow = lastRealActive; } catch (e2) {}
+
+                    // Enforce topmost layer (AboveLayer) across all virtual desktops
+                    try {
+                        if (!w.keepAbove) w.keepAbove = true;
+                        if (!w.onAllDesktops) w.onAllDesktops = true;
+                        if (!w.skipTaskbar) w.skipTaskbar = true;
+                        if (!w.skipPager) w.skipPager = true;
+                        if (!w.skipSwitcher) w.skipSwitcher = true;
+                    } catch (e0) {}
+
+                    if (w.caption && w.caption.indexOf("IXSLAND:") === 0) {
+                        var parts = w.caption.substring(8).split(",");
+                        if (parts.length >= 4) {
+                            var x = parseInt(parts[0], 10);
+                            var y = parseInt(parts[1], 10);
+                            var ww = parseInt(parts[2], 10);
+                            var hh = parseInt(parts[3], 10);
+                            if (!isNaN(x) && !isNaN(y) && !isNaN(ww) && !isNaN(hh)) {
+                                var fg = w.frameGeometry;
+                                if (fg.x !== x || fg.y !== y || fg.width !== ww || fg.height !== hh) {
+                                    try {
+                                        w.frameGeometry = { x: x, y: y, width: ww, height: hh };
+                                    } catch (e1) {}
+                                    if (lastRealActive) {
+                                        try { workspace.activeWindow = lastRealActive; } catch (e2) {}
+                                    }
+                                }
+                            }
                         }
                     }
                 } catch (e) {}
@@ -788,11 +809,23 @@ class KWinCursorTracker(QObject):
             try {
                 workspace.windowAdded.connect(function(w) {
                     placeIslandWin(w);
-                    if (isIslandWin(w) && lastRealActive) {
-                        try { workspace.activeWindow = lastRealActive; } catch (e) {}
+                    if (isIslandWin(w)) {
+                        if (lastRealActive) {
+                            try { workspace.activeWindow = lastRealActive; } catch (e) {}
+                        }
+                        try {
+                            w.keepAboveChanged.connect(function() {
+                                if (!w.keepAbove) w.keepAbove = true;
+                            });
+                        } catch (e_ka) {}
                     }
                     try { w.captionChanged.connect(function() { placeIslandWin(w); }); } catch (e) {}
                     try { w.frameGeometryChanged.connect(function() { placeIslandWin(w); }); } catch (e) {}
+                });
+            } catch (e) {}
+            try {
+                workspace.activeWindowChanged.connect(function() {
+                    placeAllIslands();
                 });
             } catch (e) {}
             placeAllIslands();
@@ -856,6 +889,7 @@ class HiddenTriggerWidget(QWidget):
     def __init__(self, parent_island):
         super().__init__(None)
         self.island = parent_island
+        self.setWindowTitle("IXSLAND_TRIGGER")
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
         self.setWindowFlags(
             Qt.WindowType.FramelessWindowHint |
@@ -1608,6 +1642,7 @@ class IxslandWidget(QWidget):
         self.init_placement()
         self.update_mask_for_mode()
         self.show()
+        self.raise_()
 
     def get_target_screen(self):
         screens = QApplication.screens()
@@ -1650,6 +1685,7 @@ class IxslandWidget(QWidget):
         """Publish target geometry through the window caption for the KWin pin script."""
         try:
             self.setWindowTitle(f"IXSLAND:{int(x)},{int(y)},{int(w)},{int(h)}")
+            self.raise_()
         except Exception:
             pass
 
@@ -1988,6 +2024,7 @@ class IxslandWidget(QWidget):
         super().leaveEvent(event)
 
     def enterEvent(self, event):
+        self.raise_()
         if self.mode == "EXPANDED_MEDIA":
             if self.auto_collapse_timer.isActive():
                 self.auto_collapse_timer.stop()
@@ -2401,6 +2438,7 @@ class IxslandWidget(QWidget):
                 self.hidden_trigger = HiddenTriggerWidget(self)
             self.hidden_trigger.move(geom.x() + (geom.width() - 130) // 2, geom.y())
             self.hidden_trigger.show()
+            self.hidden_trigger.raise_()
             if self.tray_icon:
                 self.tray_icon.showMessage(
                     "Dynamic Island Diminimalkan",
@@ -2411,6 +2449,7 @@ class IxslandWidget(QWidget):
             if self.hidden_trigger:
                 self.hidden_trigger.hide()
             self.show()
+            self.raise_()
             self.init_placement()
 
     def check_for_updates(self, callback=None):
@@ -2546,6 +2585,7 @@ class IxslandWidget(QWidget):
         self._push_kwin_position(cx, cy, canvas_w, canvas_h)
 
     def mousePressEvent(self, event):
+        self.raise_()
         pill_x, pill_y, pill_w, pill_h, scale = self._pill_geometry()
         pos = event.position()
         inside_pill = (
