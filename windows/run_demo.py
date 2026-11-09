@@ -61,7 +61,7 @@ def main():
         ("Desktop Chat Banner: WhatsApp Pesan Masuk", lambda: send_cmd("notif", app="WhatsApp", summary="Reza Rizki", body="ixsland Dynamic Island berjalan mulus di Windows 10/11 64-bit!")),
         ("Indikator Pengisian Daya Laptop: 85% Charging ⚡", lambda: send_cmd("battery", percent=85, charging=True)),
         ("Indikator Baterai Lemah: 15% 🪫", lambda: send_cmd("battery", percent=15, charging=False)),
-        ("Notifikasi Bubble Salin Teks (Clipboard Bubble) 📋", lambda: send_cmd("clipboard", text="https://github.com/rezariski/ixsland")),
+        ("Notifikasi Bubble Salin Teks (Clipboard Bubble) 📋", lambda: send_cmd("clipboard", text="https://github.com/rezariski42/ixsland")),
         ("Privacy Dot Demo (Kamera & Mikrofon Aktif) 🟢🟠", lambda: send_cmd("privacy")),
         ("Pembaruan Otomatis: Notifikasi Update Baru 🚀", lambda: send_cmd("triggerUpdateDemo")),
         ("Dynamic Island Settings: Dialog Pengaturan Fluent UI", lambda: send_cmd("settings"))

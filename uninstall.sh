@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # ixsland Dynamic Island Uninstaller
-# https://github.com/rezariski/ixsland
+# https://github.com/rezariski42/ixsland
 # ==============================================================================
 
 set -e

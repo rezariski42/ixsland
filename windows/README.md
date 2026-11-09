@@ -3,11 +3,11 @@
 > Ringan, 60 FPS, Zero Electron Bloat, Mendukung Standalone Portable Installer `Setup.exe`.
 
 <p align="left">
-  <a href="https://github.com/rezariski/ixsland/releases/download/v1.0.0/Setup.exe">
+  <a href="https://github.com/rezariski42/ixsland/releases/download/v1.0.0/Setup.exe">
     <img src="https://img.shields.io/badge/Direct%20Download-Setup.exe%20(38MB)-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Setup.exe" />
   </a>
   &nbsp;
-  <a href="https://github.com/rezariski/ixsland/releases/download/v1.0.0/ixsland-windows-v1.0.0.zip">
+  <a href="https://github.com/rezariski42/ixsland/releases/download/v1.0.0/ixsland-windows-v1.0.0.zip">
     <img src="https://img.shields.io/badge/Direct%20Download-Windows%20ZIP%20(Portable)-22C55E?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Windows ZIP" />
   </a>
 </p>
@@ -17,7 +17,7 @@
 ## ⚡ Cara Instalasi Cepat
 
 ### Cara 1: Installer Mandiri (Paling Mudah, Tanpa Perlu Install Python)
-1. Unduh langsung: [**`Setup.exe` (38 MB)**](https://github.com/rezariski/ixsland/releases/download/v1.0.0/Setup.exe).
+1. Unduh langsung: [**`Setup.exe` (38 MB)**](https://github.com/rezariski42/ixsland/releases/download/v1.0.0/Setup.exe).
 2. Ikuti panduan wizard instalasi:
    - Pilih direktori pemasangan (default: `C:\ixsland`).
    - Opsi aktifkan autostart saat Windows menyala.

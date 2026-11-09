@@ -83,7 +83,7 @@ CITY_COORDINATES = {
 }
 
 APP_VERSION = "1.3.0"
-GITHUB_REPO = "rezariski/ixsland"
+GITHUB_REPO = "rezariski42/ixsland"
 UPDATE_CHECK_URL = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
 
 DEFAULT_CONFIG = {
@@ -1760,7 +1760,7 @@ class SettingsDialog(QDialog):
         test_grid.addWidget(btn_t_privacy, 1, 1)
 
         btn_t_clip = QPushButton("📋 Test Clipboard Bubble")
-        btn_t_clip.clicked.connect(lambda: self.island.trigger_clipboard_bubble("https://github.com/rezariski"))
+        btn_t_clip.clicked.connect(lambda: self.island.trigger_clipboard_bubble("https://github.com/rezariski42"))
         test_grid.addWidget(btn_t_clip, 2, 0)
 
         btn_t_vol = QPushButton("🔊 Test Volume Overboost")
@@ -1886,12 +1886,12 @@ class SettingsDialog(QDialog):
         link_box = QHBoxLayout()
         btn_github = QPushButton("🌐 Profil GitHub")
         btn_github.setStyleSheet("background-color: #1F232B; border: 1px solid #383F4D; padding: 6px 10px;")
-        btn_github.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski")))
+        btn_github.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski42")))
         link_box.addWidget(btn_github)
 
         btn_repo = QPushButton("📦 Repositori ixsland")
         btn_repo.setStyleSheet("background-color: #1F232B; border: 1px solid #383F4D; padding: 6px 10px;")
-        btn_repo.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski/ixsland")))
+        btn_repo.clicked.connect(lambda: QDesktopServices.openUrl(QUrl("https://github.com/rezariski42/ixsland")))
         link_box.addWidget(btn_repo)
         auth_lay.addLayout(link_box)
 
@@ -2537,7 +2537,7 @@ class IxslandWidget(QWidget):
             chg = bool(data.get("charging", True))
             self.trigger_battery_alert(pct, chg)
         elif cmd in ("clipboard", "showClipboard"):
-            txt = data.get("text") or (args[0] if args else "https://github.com/rezariski")
+            txt = data.get("text") or (args[0] if args else "https://github.com/rezariski42")
             self.trigger_clipboard_bubble(txt)
         elif cmd in ("privacy", "togglePrivacy"):
             self.toggle_privacy_demo()

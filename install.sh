@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # ==============================================================================
 # ixsland Dynamic Island Installer for Linux (KDE Plasma 6 Wayland / X11)
-# https://github.com/rezariski/ixsland
+# https://github.com/rezariski42/ixsland
 #
 # Mode 1 (disarankan, ONE CLICK):  paket rilis sudah menyertakan binari `ixsland`
 #   -> pengguna TIDAK perlu memasang Python maupun PyQt6.

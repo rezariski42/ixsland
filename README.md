@@ -16,22 +16,22 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh">
+  <a href="https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh">
     <img src="https://img.shields.io/badge/Install-Linux%20One%20Click%20(shell)-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" alt="Install Linux one click" />
   </a>
   &nbsp;
-  <a href="https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz">
+  <a href="https://github.com/rezariski42/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz">
     <img src="https://img.shields.io/badge/Direct%20Download-Linux%20BIN%20(tanpa%20Python)-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" alt="Direct Download Linux binary" />
   </a>
   &nbsp;
-  <a href="https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe">
+  <a href="https://github.com/rezariski42/ixsland/releases/latest/download/Setup.exe">
     <img src="https://img.shields.io/badge/Direct%20Download-Windows%20Setup.exe-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" alt="Direct Download Windows Setup.exe" />
   </a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/rezariski/ixsland/releases/latest">
-    <img src="https://img.shields.io/github/v/release/rezariski/ixsland?style=for-the-badge&color=FFD700&labelColor=0E1017&label=Release" alt="Latest Release" />
+  <a href="https://github.com/rezariski42/ixsland/releases/latest">
+    <img src="https://img.shields.io/github/v/release/rezariski42/ixsland?style=for-the-badge&color=FFD700&labelColor=0E1017&label=Release" alt="Latest Release" />
   </a>
   <img src="https://img.shields.io/badge/Linux-Wayland%20%7C%20X11-00E5FF?style=for-the-badge&logo=linux&logoColor=white&labelColor=0E1017" />
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011%20(64--bit)-0078D4?style=for-the-badge&logo=windows&logoColor=white&labelColor=0E1017" />
@@ -59,13 +59,13 @@ Semua tautan memakai URL `releases/latest/download/...`, sehingga **selalu mengu
 
 | Sistem Operasi | Cara | Tanpa Python? | Tautan |
 |---|---|---|---|
-| 🐧 **Linux** | Satu baris di terminal | ✅ | [⬇️ **Install Linux (one click)**](https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh) |
-| 🐧 **Linux** | Unduh paket binari | ✅ | [⬇️ **ixsland-linux-x64.tar.gz**](https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz) |
-| 🪟 **Windows** | Unduh lalu jalankan Setup | ✅ | [⬇️ **Setup.exe (wizard Next/Next)**](https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe) |
+| 🐧 **Linux** | Satu baris di terminal | ✅ | [⬇️ **Install Linux (one click)**](https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh) |
+| 🐧 **Linux** | Unduh paket binari | ✅ | [⬇️ **ixsland-linux-x64.tar.gz**](https://github.com/rezariski42/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz) |
+| 🪟 **Windows** | Unduh lalu jalankan Setup | ✅ | [⬇️ **Setup.exe (wizard Next/Next)**](https://github.com/rezariski42/ixsland/releases/latest/download/Setup.exe) |
 
 > **Linux — satu baris (pemasangan instan):**
 > ```bash
-> bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)
+> bash <(curl -fsSL https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh)
 > ```
 >
 > **Windows — satu klik:** unduh `Setup.exe`, jalankan, lalu **Berikutnya → Berikutnya → Selesai**.
@@ -92,13 +92,13 @@ bisa dipindah ke layar mana pun lewat **Pengaturan → Tampilan → Layar Target
 Paket rilis sudah berupa binari mandiri (Python + PyQt6 sudah dibundel di dalamnya):
 
 ```bash
-bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)
+bash <(curl -fsSL https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh)
 ```
 
 Atau unduh manual lalu pasang:
 
 ```bash
-curl -LO https://github.com/rezariski/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz
+curl -LO https://github.com/rezariski42/ixsland/releases/latest/download/ixsland-linux-x64.tar.gz
 tar -xzf ixsland-linux-x64.tar.gz
 cd ixsland-linux-x64
 ./install.sh
@@ -121,7 +121,7 @@ sudo apt update && sudo apt install python3 python3-pyqt6 pipewire wireplumber
 # Fedora
 sudo dnf install python3 python3-pyqt6 pipewire wireplumber
 
-git clone https://github.com/rezariski/ixsland.git
+git clone https://github.com/rezariski42/ixsland.git
 cd ixsland
 chmod +x install.sh
 ./install.sh
@@ -151,7 +151,7 @@ Mendukung penuh arsitektur **Windows 10 (64-bit, 1903+)** dan **Windows 11 (64-b
 
 ### Opsi A: Standalone Setup Installer (Paling Praktis, Tanpa Perlu Python)
 
-1. Unduh **[`Setup.exe`](https://github.com/rezariski/ixsland/releases/latest/download/Setup.exe)** lalu jalankan.
+1. Unduh **[`Setup.exe`](https://github.com/rezariski42/ixsland/releases/latest/download/Setup.exe)** lalu jalankan.
 2. Ikuti wizard gaya umum — cukup **Berikutnya → Berikutnya → Selesai**:
    - **Halaman sambutan** — info versi dan langkah pemasangan.
    - **Pilih lokasi pemasangan** (default: `C:\ixsland`, bisa diubah lewat *Jelajahi...*).

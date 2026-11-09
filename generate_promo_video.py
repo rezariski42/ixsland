@@ -138,11 +138,11 @@ SCENES = [
         "title": "ixsland for Linux Wayland",
         "sub": "Proyek open source siap pakai untuk desktop modern Linux Anda",
         "bullets": [
-            ("Kunjungi Repositori", "github.com/rezariski/ixsland"),
+            ("Kunjungi Repositori", "github.com/rezariski42/ixsland"),
             ("Setup Cepat & Ringan", "Cukup clone dan aktifkan via systemd user service."),
             ("Dukung Proyek Ini", "Beri bintang di GitHub dan bagikan ke komunitas Linux!")
         ],
-        "tags": ["github.com/rezariski", "GPL-3.0", "Arch / CachyOS / KDE", "Made with PyQt6"]
+        "tags": ["github.com/rezariski42", "GPL-3.0", "Arch / CachyOS / KDE", "Made with PyQt6"]
     }
 ]
 
@@ -1004,7 +1004,7 @@ def render_frame(frame_num):
 
     p.setFont(QFont("Cantarell", 11, QFont.Weight.Bold))
     p.setPen(QColor(255, 255, 255))
-    p.drawText(QRectF(gh_x + 44, gh_y, gh_w - 60, gh_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "github.com/rezariski/ixsland")
+    p.drawText(QRectF(gh_x + 44, gh_y, gh_w - 60, gh_h), Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, "github.com/rezariski42/ixsland")
 
     p.setFont(QFont("Cantarell", 24, QFont.Weight.ExtraBold))
     p.setPen(QColor(255, 255, 255))

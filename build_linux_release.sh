@@ -110,4 +110,4 @@ echo "Hasil:"
 ls -la dist/ixsland-linux-x64.tar.gz dist/install-linux.sh
 echo
 echo "Uji lokal :  tar -xzf dist/ixsland-linux-x64.tar.gz -C /tmp && bash /tmp/ixsland-linux-x64/install.sh"
-echo "One click :  bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)"
+echo "One click :  bash <(curl -fsSL https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh)"

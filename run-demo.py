@@ -104,7 +104,7 @@ def main():
             dbus_call("triggerBattery", 15, False)
         )),
         ("Clipboard Bubble: Teks Kode Disalin 📋", lambda: (
-            dbus_call("triggerClipboard", "https://github.com/rezariski/ixsland")
+            dbus_call("triggerClipboard", "https://github.com/rezariski42/ixsland")
         )),
         ("Privacy Dot: Kamera & Mic Aktif 🟢🟠", lambda: (
             dbus_call("togglePrivacy")

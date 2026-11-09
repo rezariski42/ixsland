@@ -3,14 +3,14 @@
 # ixsland Dynamic Island — pemasang SATU KLIK (Linux)
 #
 # Jalankan satu baris ini di terminal:
-#   bash <(curl -fsSL https://github.com/rezariski/ixsland/releases/latest/download/install-linux.sh)
+#   bash <(curl -fsSL https://github.com/rezariski42/ixsland/releases/latest/download/install-linux.sh)
 #
 # Skrip ini mengunduh paket binari terbaru (tanpa Python) lalu memasangnya.
 # ==============================================================================
 
 set -euo pipefail
 
-REPO="rezariski/ixsland"
+REPO="rezariski42/ixsland"
 ASSET="ixsland-linux-x64.tar.gz"
 
 echo "==> Memeriksa versi terbaru ixsland ..."
